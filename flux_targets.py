@@ -10,6 +10,7 @@ import urllib2
 import numpy as np
 import pandas as pd
 import re
+import os
 
 station_IDs_col = 'index_station'
 start_dates_col = 'index_start'
@@ -21,7 +22,11 @@ CumulativeArea_file = None
 drainage_areas_from_NHD = False
 area_units_mult = 0.386102 # multiplier to convert area units to mi2
 
-output_file = 'adjusted_baseflows.csv'
+output_file = '../../FishHatch/adjusted_baseflows.csv'
+daily_index_data_dir = os.path.split(output_file)[0] + '/daily_index_data'
+
+if not os.path.isdir(daily_index_data_dir):
+    os.makedirs(daily_index_data_dir)
 
 # find start of data and column names in NWIS file
 def NWIS_header(text):
@@ -156,8 +161,17 @@ if __name__ == "__main__":
     # get Q90 values
     for i, u in enumerate(unique_IDs):
         rawtext = get_nwis(str(u), '00060', start_date=start_dates_f[i])
+
+        # save down rawtxt to file
+        dailyfile = os.path.join(daily_index_data_dir, str(u) + '.txt')
+        ofp = open(dailyfile, 'w')
+        [ofp.write(l) for l in rawtext]
+        ofp.close()
+
         data[u] = NWIS2df(rawtext)
-        Q90[u] = data[u]['02_00060_00003'].quantile(q=0.1)
+        if np.shape(data[u])[1] > 1:
+            print 'Warning, multiple data columns! Check {}'.format(dailyfile)
+        Q90[u] = data[u].quantile(q=0.1).values[0]
 
     # get recorded Q values at index stations, add index station info to measurements dataframe
     M['Qr'] = np.zeros(len(M))
@@ -167,7 +181,8 @@ if __name__ == "__main__":
         datetime = pd.to_datetime(M.ix[i, 'datetime'])
         index_station = M.ix[i, station_IDs_col]
         dt_ind = data[index_station].index.searchsorted(datetime)
-        M.ix[i, 'Qr'] = data[index_station].ix[data[index_station].index[dt_ind], '02_00060_00003']
+
+        M.ix[i, 'Qr'] = data[index_station].ix[data[index_station].index[dt_ind], :].values[0]
         M.ix[i, 'Q90'] = Q90[index_station]
 
     # calculate baseflow, add to measurements dataframe
@@ -175,6 +190,9 @@ if __name__ == "__main__":
 
     # include CFD
     M['Qb_cfd'] = M['Qb'] * 3600 * 24
+    
+    # ratio of measured to estimated long-term
+    M['Qb/Qm'] = M['Qb'] / M['Qm']
 
     # write output
     M.to_csv(output_file, index=False)
