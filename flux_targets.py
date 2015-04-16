@@ -1,7 +1,8 @@
 __author__ = 'aleaf'
 
 import sys
-GISio_path = 'D:\\ATLData\\Documents\\GitHub\\GIS_utils\\'
+import datetime as dt
+GISio_path = '../GIS_utils'
 if GISio_path not in sys.path:
     sys.path.append(GISio_path)
 import GISio
@@ -9,19 +10,23 @@ import urllib2
 import numpy as np
 import pandas as pd
 import re
+import os
 
-station_IDs = ['4027000', '4026561', '5362000', '5359500', '5332500']
-start_dates = ['1970-01-01', '2011-05-20']
+station_IDs_col = 'index_station'
+start_dates_col = 'index_start'
 
+measurements_file = '../../FishHatch/flux_target_info.csv'
+CumulativeArea_file = None
 
-#start_date = '1970-01-01'
-#station_ID = '04027000'
-discharge_code = '02_00060_00003'
+# if True, get drainage areas for comids from NHDPlus, otherwise, supply in 'Area' column of measurements file
+drainage_areas_from_NHD = False
+area_units_mult = 0.386102 # multiplier to convert area units to mi2
 
-measurements_file = 'D:\\ATLData\\BadRiver\\Testpoints\\flux_targets\\20140924_seepage_run_04026561.csv'
-CumulativeArea_file = 'D:\\ATLData\\BadRiver\\BCs\\NHDPlusGL\\NHDPlus04\\NHDPlusAttributes\\CumulativeArea.dbf'
+output_file = '../../FishHatch/adjusted_baseflows.csv'
+daily_index_data_dir = os.path.split(output_file)[0] + '/daily_index_data'
 
-output_file = 'adjusted_baseflows.csv'
+if not os.path.isdir(daily_index_data_dir):
+    os.makedirs(daily_index_data_dir)
 
 # find start of data and column names in NWIS file
 def NWIS_header(text):
@@ -39,8 +44,15 @@ def NWIS_header(text):
 def get_nwis(station_ID, parameter_code, start_date='1880-01-01'):
     '''
     reads discharge values for an NWIS gage site into a pandas dataframe
-    " To obtain the entire period-of-record use a start date of 1880-01-01..."
+    To obtain the entire period-of-record use a start date of 1880-01-01...
+
+    stationID: (string) USGS station ID
+
+    parameter_code: (string) e.g. 00060 for discharge
+
+    start_date: (string) 'YYYY-DD-MM'
     '''
+
     print "getting data for site {0}...".format(station_ID)
     #url = 'http://nwis.waterdata.usgs.gov/wi/nwis/uv/?cb_00060=on&format=rdb&site_no={0}&begin_date={1}'\
     #    .format(station_ID, start_date)
@@ -61,21 +73,22 @@ def get_nwis(station_ID, parameter_code, start_date='1880-01-01'):
 
     return text
 
-def NWIS2df(text):
+
+def NWIS2df(text, parameter='00060'):
 
     columns, knt = NWIS_header(text)
-
-    if not start_date:
-        start_date = header[knt].split()[2]
-
-    print "downloading discharge data for {0} from {1} to present...".format(station_ID, start_date)
 
     try:
         parameter_cd = [c for c in columns if parameter in c and '_cd' not in c][0]
     except:
          print 'column for parameter {} not found!'.format(parameter)
 
-    df = pd.read_csv(url, sep='\t', names=columns, skiprows=knt, index_col=2, parse_dates=True)
+    print text[knt]
+
+    # convert tabular data to dataframe
+    df = pd.DataFrame([s.strip().split('\t') for s in text[knt:]])
+    df.columns = columns
+    df.index = pd.to_datetime(df['datetime'])
     df = pd.DataFrame(df[parameter_cd])
 
     # remove 'ICE' or other text flags in discharge values
@@ -94,6 +107,7 @@ def statewide_eqn(Qm, A, Qr, Q90):
     Qb = 0.907 * A**1.02 * Bf**0.52
     return Qb, Bf
 
+
 def get_drainage_areas(comids, CumulativeArea_file, units='mi2', areatype='TotDASqKM'):
     CA = GISio.shp2df(CumulativeArea_file)
     CA.index = CA.ComID
@@ -104,6 +118,7 @@ def get_drainage_areas(comids, CumulativeArea_file, units='mi2', areatype='TotDA
         elif units == 'km2':
             areas_dict[comid] = CA.ix[comid, areatype]
     return areas_dict
+
 
 def match_index_station(station, index_stations):
     for ID in index_stations:
@@ -116,41 +131,69 @@ def match_index_station(station, index_stations):
 
 
 if __name__ == "__main__":
+
     # read in measurements
     M = pd.read_csv(measurements_file, parse_dates=True)
 
-    # get drainage areas
-    comids = list(np.unique(M['comid']))
-    areas_dict = get_drainage_areas(comids, CumulativeArea_file)
+
+
+    if drainage_areas_from_NHD:
+        # get drainage areas
+        comids = list(np.unique(M['comid']))
+        areas_dict = get_drainage_areas(comids, CumulativeArea_file)
+        M['A'] = [areas_dict[c] for c in M.comid]
+    else:
+        area_col = [c for c in M.columns if c.lower() == 'area'][0]
+        M['A'] = M[area_col] * area_units_mult
 
     # get data and calculate Q90 values for stations
+    unique_IDs = np.unique(M[station_IDs_col])
+    start_dates = [M.iloc[np.where(M[station_IDs_col] == uid)[0][0]][start_dates_col] for uid in unique_IDs]
+
+    # format the dates correctly
+    start_dates_f = []
+    for s in start_dates:
+        t = pd.to_datetime(s)
+        start_dates_f.append('{:d}-{:02d}-{:02d}'.format(t.year, t.month, t.day))
+
     data = {}
     Q90 = {}
     # get Q90 values
-    for i in range(len(station_IDs)):
-        data[station_IDs[i]] = nwis2df(station_IDs[i], start_dates[i])
-        Q90[station_IDs[i]] = data[station_IDs[i]]['02_00060_00003'].quantile(q=0.1)
+    for i, u in enumerate(unique_IDs):
+        rawtext = get_nwis(str(u), '00060', start_date=start_dates_f[i])
+
+        # save down rawtxt to file
+        dailyfile = os.path.join(daily_index_data_dir, str(u) + '.txt')
+        ofp = open(dailyfile, 'w')
+        [ofp.write(l) for l in rawtext]
+        ofp.close()
+
+        data[u] = NWIS2df(rawtext)
+        if np.shape(data[u])[1] > 1:
+            print 'Warning, multiple data columns! Check {}'.format(dailyfile)
+        Q90[u] = data[u].quantile(q=0.1).values[0]
 
     # get recorded Q values at index stations, add index station info to measurements dataframe
     M['Qr'] = np.zeros(len(M))
     M['Q90'] = np.zeros(len(M))
-    M['A'] = np.zeros(len(M))
     M['Bf'] = np.zeros(len(M))
     for i in M.index:
         datetime = pd.to_datetime(M.ix[i, 'datetime'])
-        index_station = match_index_station(M.ix[i, 'index_station'], station_IDs)
+        index_station = M.ix[i, station_IDs_col]
         dt_ind = data[index_station].index.searchsorted(datetime)
-        M.ix[i, 'Qr'] = data[index_station].ix[data[index_station].index[dt_ind], '02_00060_00003']
-        M.ix[i, 'index_station'] = index_station
+
+        M.ix[i, 'Qr'] = data[index_station].ix[data[index_station].index[dt_ind], :].values[0]
         M.ix[i, 'Q90'] = Q90[index_station]
-        M.ix[i, 'A'] = areas_dict[M.ix[i, 'comid']]
 
     # calculate baseflow, add to measurements dataframe
     M['Qb'], M['Bf'] = statewide_eqn(M['Qm'], M['A'], M['Qr'], M['Q90'])
 
     # include CFD
     M['Qb_cfd'] = M['Qb'] * 3600 * 24
+    
+    # ratio of measured to estimated long-term
+    M['Qb/Qm'] = M['Qb'] / M['Qm']
 
     # write output
-    M.to_csv(output_file)
+    M.to_csv(output_file, index=False)
 
