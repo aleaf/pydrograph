@@ -1,5 +1,9 @@
 # NWIS
-Classes for working with the USGS National Water Information System
+Classes for working with the USGS National Water Information System. This repo is a work in progress. Currently the nwis.py module is limited to generating site information for a lat/lon bounding box (see below). Methods for pulling actual data from the results of the bounding box query will be added. 
+
+The scripts folder contains some rough code examples invovling fetching and/or processing information from NWIS. The Notebooks folder has a Notebook from the USGS python class that illustrates fetching daily values using a url and then manipulating the data in pandas. You can view it here: <http://nbviewer.ipython.org/github/aleaf/NWIS/blob/master/Notebooks/NWIS_example.ipynb>
+
+
 
 ###Example of retrieving site information for an area defined by a lat/lon bounding box:
 ```python
