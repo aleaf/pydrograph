@@ -2,12 +2,35 @@ __author__ = 'aleaf'
 
 import datetime as dt
 import urllib2
+import numpy as np
 import pandas as pd
-from shapely.geometry import Point
+import fiona
+from fiona.crs import to_string, from_epsg
+from shapely.geometry import Point, Polygon, shape
+import pyproj
 import GISio
+from GISops import project
+
+
+coord_datums_epsg = {'NAD83': 4269,
+                     'NAD27': 4267}
+
+
 
 
 class NWIS:
+    """
+    NWIS error codes:
+    E     Excellent    The data is within 2% (percent) of the actual flow
+    G     Good         The data is within 5% (percent) of the actual flow
+    F     Fair         The data is within 8% (percent) of the actual flow
+    P     Poor         The data are >8% (percent) of the actual flow
+    """
+
+    est_error = {'EXCELLENT': 0.02,
+                 'GOOD': 0.05,
+                 'FAIR': 0.08}
+
 
     urlbase = 'http://waterdata.usgs.gov/nwis/'
     dtypes_dict = {'dv': 'dv?referred_module=sw&site_tp_cd=ST&',
@@ -32,7 +55,7 @@ class NWIS:
     rdb_compression = 'file' #'rdb_compression=file'
     list_of_search_criteria = 'lat_long_bounding_box' #'list_of_search_criteria=lat_long_bounding_box'
 
-    def __init__(self, ll_bbox):
+    def __init__(self, ll_bbox=None, extent=None, datum='NAD83'):
         """Class for retrieving data from NWIS.
         Currently only retrieves data within a specified lat/lon bounding box.
 
@@ -42,11 +65,49 @@ class NWIS:
             List containing bounding latitudes and longitudes in decimal degrees, in the following order:
             [northwest longitude, northwest latitude, southeast longitude, southeast latitude]
 
+
         see the code for a list of default parameters
         """
 
         self.ll_bbox = ll_bbox
+        if extent is not None:
+            self.extent = self._read_extent_shapefile(extent)
+        else:
+            self.extent = None
+        self.datum = datum
+        self.proj4 = to_string(from_epsg(coord_datums_epsg[self.datum]))
 
+    def _compute_geometries(self, df):
+
+        geoms = []
+        for i in range(len(df)):
+
+            p = Point(df.dec_lat_va[i], df.dec_long_va[i])
+            pr1 = "+init=EPSG:{}".format(coord_datums_epsg[df.dec_coord_datum_cd[i]])
+            pr2 = self.proj4
+            geom = project(p, pr1, pr2)
+            geoms.append(geom)
+        return geoms
+
+    def _cull_to_extent(self, df):
+
+        if not 'geometry' in df.columns:
+            df['geometry'] = self._compute_geometries(df)
+
+        within = np.array([g.within(self.extent) for g in df.geometry])
+        return df[within].copy()
+
+    def _read_extent_shapefile(self, shpfile, buffer=0):
+
+        print 'reading extent from {}...'.format(shpfile)
+        shp = fiona.open(shpfile)
+        g = shape(shp.next()['geometry'])
+
+        if to_string(from_epsg(coord_datums_epsg[self.datum])) != to_string(shp.crs):
+            print 'reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj4)
+            return project(g, to_string(shp.crs), self.proj4)
+        else:
+            return g
 
     def make_site_url(self, data_type, attributes):
         """
@@ -173,11 +234,15 @@ class NWIS:
         -------
         the contents of an NWIS site information file in a dataframe format
         """
-
         url = self.make_site_url(data_type, attributes)
         sitefile_text = urllib2.urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, attributes[0])
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
+
+        df['geometry'] = self._compute_geometries(df)
+        if self.extent is not None:
+            within = np.array([g.within(self.extent) for g in df.geometry])
+            return df[within].copy()
         return df
 
     def get_dvs(self, station_ID, parameter_code='00060', start_date='1880-01-01'):
