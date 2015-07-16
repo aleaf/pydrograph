@@ -77,12 +77,12 @@ class NWIS:
         """
 
         self.ll_bbox = ll_bbox
+        self.datum = datum
+        self.proj4 = coord_datums_proj4[self.datum]
         if extent is not None:
             self.extent = self._read_extent_shapefile(extent)
         else:
             self.extent = None
-        self.datum = datum
-        self.proj4 = coord_datums_proj4[self.datum]
 
         print 'Fetching site info...'
         self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
@@ -271,10 +271,10 @@ class NWIS:
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
 
         df['geometry'] = self._compute_geometries(df)
+        df.index = df.site_no
         if self.extent is not None:
             within = np.array([g.within(self.extent) for g in df.geometry])
             return df[within].copy()
-        df.index = df.site_no
         return df
 
     @property
@@ -442,7 +442,8 @@ class NWIS:
                     indexQ90.append(q90)
                     X.append(site_info['geometry'].xy[0][0])
                     Y.append(site_info['geometry'].xy[1][0])
-                except KeyError:
+                except KeyError, e:
+                    print e
                     continue
 
         df = pd.DataFrame({'site_no': fm_site_no,
