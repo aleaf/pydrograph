@@ -414,7 +414,11 @@ class NWIS:
             mdt = fm.measurement_dt[i]
             Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
             for site_no, data in self.dvs.items():
-                try:
+
+                # check if index station covers measurement date
+                if Dt < data.index[0] or Dt > data.index[-1]:
+                    continue
+                else:
                     dv = data.ix[Dt]
                     site_no = dv.site_no
                     DDcd = [k for k in data.keys() if '00060' in k and not 'cd' in k][0]
@@ -442,9 +446,6 @@ class NWIS:
                     indexQ90.append(q90)
                     X.append(site_info['geometry'].xy[0][0])
                     Y.append(site_info['geometry'].xy[1][0])
-                except KeyError, e:
-                    print e
-                    continue
 
         df = pd.DataFrame({'site_no': fm_site_no,
                            'station_nm': station_nm,
