@@ -10,7 +10,7 @@ from shapely.geometry import Point, Polygon, shape
 import pyproj
 import GISio
 from GISops import project, projectdf
-from attributes import streamflow_attributes
+from attributes import streamflow_attributes, gw_attributes
 
 
 coord_datums_epsg = {'NAD83': 4269,
@@ -39,9 +39,14 @@ class NWIS:
                  'FAIR': 0.08}
     default_error = 0.50
 
-    urlbase = 'http://waterdata.usgs.gov/nwis/'
+    urlbase = 'http://nwis.waterdata.usgs.gov/usa/nwis/'
     dtypes_dict = {'dv': 'dv?referred_module=sw&site_tp_cd=ST&',
-                   'field_measurements': 'measurements?'}
+                   'field_measurements': 'measurements?',
+                   'gwlevels': 'gwlevels?',
+                   'gwdv': 'dv?referred_module=gw&site_tp_cd=GW&'}
+
+    parameter_codes = {'discharge': '00060',
+                       'gwlevels': '72019'}
 
     coordinate_format = 'decimal_degrees' #coordinate_format=decimal_degrees&
     group_key = 'NONE' #group_key=NONE&
@@ -54,6 +59,7 @@ class NWIS:
     begin_date = '1880-01-01' #begin_date=2014-04-14
     end_date = '{:02d}-{:02d}-{:02d}'.format(now.year, now.month, now.day-1) #end_date=2015-04-13
 
+    date_cols = ['measurement_dt', 'lev_dt']
 
     logscale = 1 #'set_logscale_y=1'
     channel_html_info = 0 #'channel_html_info=0'
@@ -80,17 +86,32 @@ class NWIS:
         self.datum = datum
         self.proj4 = coord_datums_proj4[self.datum]
         if extent is not None:
-            self.extent = self._read_extent_shapefile(extent)
+            if isinstance(extent, str):
+                self.extent = self._read_extent_shapefile(extent)
+            elif isinstance(extent, Polygon):
+                self.extent = extent
+            else:
+                print 'Warning: extent argument of unknown datatype!'
+                self.extent = None
         else:
             self.extent = None
+        if ll_bbox is None and self.extent is not None:
+            self.ll_bbox = self.extent.bounds
+        else:
+            print 'Need bounding box or shapefile for NWIS queries.'
+            return
 
         print 'Fetching site info...'
         self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
         self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
+        self.gwfield_sites = self.get_siteinfo('gwlevels', gw_attributes)
+        self.gwdv_sites = self.get_siteinfo('gwdv', gw_attributes)
 
         self.field_measurements = pd.DataFrame() # dataframe of all field measurements for area
+        self.gwlevels = pd.DataFrame()
         self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
         self.dv_q90 = {} # q90 flows for daily values stations, keyed by site no
+
 
     def _compute_geometries(self, df):
 
@@ -193,6 +214,7 @@ class NWIS:
         See <http://help.waterdata.usgs.gov/faq/sites/do-station-numbers-have-any-particular-meaning>
 
         """
+
         if not isinstance(station_IDs, list):
             station_IDs = [str(station_IDs)]
 
@@ -201,7 +223,8 @@ class NWIS:
                 station_ID = '0{}'.format(station_IDs)
             return station_ID
 
-        station_IDs = ','.join(['0{}'.format(int(str(s))) for s in station_IDs])
+        #station_IDs = ','.join(['0{}'.format(int(str(s))) for s in station_IDs])
+        station_IDs = ','.join([self._correct_stationID(s) for s in station_IDs])
 
         url = 'http://waterservices.usgs.gov/nwis/dv/?format=rdb'
 
@@ -213,7 +236,8 @@ class NWIS:
         print '{}'.format(url)
         return url
 
-    def make_measurements_url(self, station_ID):
+
+    def make_measurements_url(self, station_ID, txt='measurements'):
         """Creates url to retrieve daily values for a site
 
 
@@ -222,18 +246,15 @@ class NWIS:
         stationID: (string)
             USGS station ID
 
-        parameter_code: (string)
-            e.g. 00060 for discharge.
-            See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
+        txt: (string)
+            'measurements' for field measurements of streamflow
+            'gwlevels' for field measurements of groundwater level
 
-        start_date: (string) 'YYYY-DD-MM'
-            To obtain the entire period-of-record use a start date of 1880-01-01 (default)...
         """
-        if 1 < int(str(station_ID)[0]) < 10:
-            station_ID = '0{}'.format(station_ID)
+        station_ID = self._correct_stationID(station_ID)
 
-        url =  'http://waterdata.usgs.gov/nwis/measurements?site_no={}&agency_cd=USGS&format=rdb'\
-                .format(station_ID)
+        url =  'http://nwis.waterdata.usgs.gov/nwis/{}?site_no={}&agency_cd=USGS&format=rdb'\
+                .format(txt, station_ID)
         print '{}'.format(url)
         return url
 
@@ -277,10 +298,18 @@ class NWIS:
             return df[within].copy()
         return df
 
+    def _correct_stationID(self, stationID):
+        if 1 < int(str(stationID)[0]) < 10 and len(str(stationID)) < 15:
+            return '0{}'.format(stationID)
+        return str(stationID)
+
     @property
     def _get_dv_sites(self):
         print 'Fetching info for sites with daily values...'
         self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
+
+    def _get_date_col(self, df):
+        return [d for d in self.date_cols if d in df.columns][0]
 
     def get_dvs(self, station_ID, parameter_code='00060', start_date='1880-01-01', end_date=None):
         """Retrieves daily values for a site.
@@ -290,8 +319,7 @@ class NWIS:
         stationID: (string)
             USGS station ID
 
-        parameter_code: (string)
-            e.g. 00060 for discharge.
+        parameter_code: string, default is 00060 for discharge.
             See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
 
         start_date: (string) 'YYYY-DD-MM'
@@ -301,6 +329,8 @@ class NWIS:
         -------
         dv: a datetime-index dataframe of daily discharge, with datagaps filled with NaNs
         """
+        if parameter_code in self.parameter_codes.keys():
+            parameter_code = self.parameter_codes[parameter_code]
 
         url = self.make_dv_url(station_ID, parameter_code=parameter_code,
                                start_date=start_date, end_date=end_date)
@@ -311,7 +341,7 @@ class NWIS:
         df.index = pd.to_datetime(df.datetime)
         return df
 
-    def get_measurements(self, station_ID):
+    def get_measurements(self, station_ID, txt='measurement'):
         """Retrieves field measurements for a site.
 
         Parameters
@@ -324,33 +354,33 @@ class NWIS:
         dv: a datetime-index dataframe of the measurements
         """
 
-        url = self.make_measurements_url(station_ID)
+        url = self.make_measurements_url(station_ID, txt)
         sitefile_text = urllib2.urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].strip().split('\t')
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         if len(df) > 0:
-            df.index = pd.to_datetime(df.measurement_dt)
+            df.index = pd.to_datetime(df[self._get_date_col(df)])
         return df
 
-    def get_all_measurements(self, site_numbers):
+    def get_all_measurements(self, site_numbers, txt='measurements'):
 
         all_measurements = pd.DataFrame()
         for s in site_numbers:
             print(s)
-            df = self.get_measurements(s)
+            df = self.get_measurements(s, txt=txt)
             df.index = pd.MultiIndex.from_product([[df.site_no.values[0]], df.index.values],
                                               names=['site_no', 'datetime'])
-            df['measurement_dt'] = pd.to_datetime(df.measurement_dt)
+            df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
             all_measurements = all_measurements.append(df)
         self.field_measurements = all_measurements
         return all_measurements
 
-    def get_all_dvs(self, stations, start_date='1880-01-01', end_date=None):
+    def get_all_dvs(self, stations, parameter_code='00060', start_date='1880-01-01', end_date=None):
         all_dvs = {}
         for station in stations:
             try:
-                df = self.get_dvs(station, start_date=start_date, end_date=end_date)
+                df = self.get_dvs(station, parameter_code=parameter_code, start_date=start_date, end_date=end_date)
             except Exception, e:
                 print e
                 continue
