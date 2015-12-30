@@ -68,7 +68,8 @@ class NWIS:
     rdb_compression = 'file' #'rdb_compression=file'
     list_of_search_criteria = 'lat_long_bounding_box' #'list_of_search_criteria=lat_long_bounding_box'
 
-    def __init__(self, ll_bbox=None, extent=None, datum='NAD83'):
+    def __init__(self, ll_bbox=None, extent=None, datum='NAD83',
+                 get_sw_sites=True, get_gw_sites=True):
         """Class for retrieving data from NWIS.
         Currently only retrieves data within a specified lat/lon bounding box.
 
@@ -97,21 +98,25 @@ class NWIS:
             self.extent = None
         if ll_bbox is None and self.extent is not None:
             self.ll_bbox = self.extent.bounds
-        else:
+        elif not ll_bbox and self.extent is None:
             print 'Need bounding box or shapefile for NWIS queries.'
             return
+        else:
+            pass
 
-        print 'Fetching site info...'
-        self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
-        self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
-        self.gwfield_sites = self.get_siteinfo('gwlevels', gw_attributes)
-        self.gwdv_sites = self.get_siteinfo('gwdv', gw_attributes)
+        if get_gw_sites or get_sw_sites:
+            print 'Fetching site info...'
+        if get_sw_sites:
+            self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
+            self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
+        if get_gw_sites:
+            self.gwfield_sites = self.get_siteinfo('gwlevels', gw_attributes)
+            self.gwdv_sites = self.get_siteinfo('gwdv', gw_attributes)
 
         self.field_measurements = pd.DataFrame() # dataframe of all field measurements for area
         self.gwlevels = pd.DataFrame()
         self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
         self.dv_q90 = {} # q90 flows for daily values stations, keyed by site no
-
 
     def _compute_geometries(self, df):
 
@@ -421,6 +426,9 @@ class NWIS:
 
     def baseflow_summary(self, q90_window=20, output_proj4=None):
 
+        if self.field_measurements['measurement_dt'].dtype != 'datetime64[ns]':
+            self.field_measurements['measurement_dt'] = \
+                pd.to_datetime(self.field_measurements.measurement_dt)
         fm = self.field_measurements
 
         field_sites = self.field_sites.copy()
@@ -446,36 +454,37 @@ class NWIS:
             for site_no, data in self.dvs.items():
 
                 # check if index station covers measurement date
-                if Dt < data.index[0] or Dt > data.index[-1]:
-                    continue
-                else:
+                try:
                     dv = data.ix[Dt]
-                    site_no = dv.site_no
-                    DDcd = [k for k in data.keys() if '00060' in k and not 'cd' in k][0]
-                    try:
-                        Qr = float(dv[DDcd]) # handle ice and other non numbers
-                    except:
-                        continue
+                except KeyError:
+                    continue
+                dv = data.ix[Dt]
+                site_no = dv.site_no
+                DDcd = [k for k in data.keys() if '00060' in k and not 'cd' in k][0]
+                try:
+                    Qr = float(dv[DDcd]) # handle ice and other non numbers
+                except:
+                    continue
 
-                    # get q90 values for window
-                    q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window, unit='Y')
-                    q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window, unit='Y')
-                    values = data.ix[q90start:q90end, DDcd].convert_objects(convert_numeric=True)
-                    q90 = values.quantile(q=0.1)
+                # get q90 values for window
+                q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window, unit='Y')
+                q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window, unit='Y')
+                values = pd.to_numeric(data.ix[q90start:q90end, DDcd], errors='coerce')
+                q90 = values.quantile(q=0.1)
 
-                    # append last to avoid mismatches in length
-                    site_info = field_sites.ix[fm.site_no[i]]
-                    fm_site_no.append(fm.site_no[i])
-                    station_nm.append(site_info['station_nm'])
-                    Qm.append(fm.discharge_va[i])
-                    measurement_dt.append(fm.measurement_dt[i])
-                    measured_rating_diff.append(fm.measured_rating_diff[i])
-                    drainage_area.append(site_info['drain_area_va'])
-                    index_station.append(site_no)
-                    indexQr.append(Qr)
-                    indexQ90.append(q90)
-                    X.append(site_info['geometry'].xy[0][0])
-                    Y.append(site_info['geometry'].xy[1][0])
+                # append last to avoid mismatches in length
+                site_info = field_sites.ix[fm.site_no[i]]
+                fm_site_no.append(fm.site_no[i])
+                station_nm.append(site_info['station_nm'])
+                Qm.append(fm.discharge_va[i])
+                measurement_dt.append(fm.measurement_dt[i])
+                measured_rating_diff.append(fm.measured_rating_diff[i])
+                drainage_area.append(site_info['drain_area_va'])
+                index_station.append(site_no)
+                indexQr.append(Qr)
+                indexQ90.append(q90)
+                X.append(site_info['geometry'].xy[0][0])
+                Y.append(site_info['geometry'].xy[1][0])
 
         df = pd.DataFrame({'site_no': fm_site_no,
                            'station_nm': station_nm,
