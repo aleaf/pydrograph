@@ -1,6 +1,91 @@
 import numpy as np
 import pandas as pd
 
+def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=None):
+    """For each point in points, get upstream drainage area in km2, using
+    NHDPlus PlusFlow routing table and NHDPlus Catchment areas. Upstream area
+    within the containing catchment is estimated as a fraction of proportional
+    to the distance of the measurment point along the NHDPlus Flowline associated with the catchment.
+
+    Parameters
+    ----------
+    points : list of shapely Point objects
+        Locations of streamflow measurements. Must be in same coordinate system as NHDCatchments
+    PlusFlow : str or list of strings
+        Path(s) to PlusFlow routing tables
+    NHDFlowlines : str or list of strings
+        Path(s) to Flowlines shapefiles
+    NHDCatchments : str or list of strings
+        Path(s) to Catchment shapefiles
+    nearfield : shapefile or shapely Polygon
+        Nearfield area of model. Used to filter NHDPlus flowlines and catchments to
+        greatly speed reading them in and finding the COMIDs associated with points.
+        Must be in same coordinate system as points and NHDPlus shapefiles.
+
+    Returns
+    -------
+    upstream_area : list
+        List of areas in km2, for each point in points.
+    """
+    try:
+        import fiona
+        from shapely.geometry import LineString, Polygon, shape
+        from GISio import shp2df
+    except ImportError:
+        print('This method requires fiona, shapely and GIS_utils.')
+
+    if isinstance(nearfield, Polygon):
+        bbox = nearfield.bounds
+    elif isinstance(nearfield, str):
+        bbox = shape(fiona.open(nearfield).next()['geometry']).bounds()
+    else:
+        bbox = None
+
+    # dialate the bounding box by half, so that features aren't missed.
+    x = 0.5 * (bbox[2] - bbox[0])
+    y = 0.5 * (bbox[3] - bbox[1])
+    bbox = (bbox[0]-x, bbox[1]-y, bbox[2]+x, bbox[3]+y)
+
+    pf = shp2df(PlusFlow)
+    fl = shp2df(NHDFlowlines, index='COMID', filter=bbox)
+    cmt = shp2df(NHDCatchments, index='FEATUREID', filter=bbox)
+
+    # find the catchment containing each point in points
+    comids = []
+    for p in points:
+        comids += cmt.FEATUREID[np.array([p.within(g) for g in cmt.geometry])].tolist()
+
+    upstream_area = []
+    for i, comid in enumerate(comids):
+        comids = {comid}
+        upstream = [comid]
+        for j in range(1000):
+            upstream = set(pf.ix[pf.TOCOMID.isin(upstream), 'FROMCOMID']).difference({0})
+            if len(upstream) == 0:
+                break
+            comids.update(upstream)
+
+        total_upstream_area = cmt.ix[comids, 'AreaSqKM'].sum()
+        if comid == 11951607:
+            j=2
+        # estimate fraction of containing catchment that is upstream
+        # by finding closest vertex on flowline,
+        # and then dividing upstream length by downstream length
+        #X = np.array(fl.ix[comid, 'geometry'].coords.xy[0])
+        #Y = np.array(fl.ix[comid, 'geometry'].coords.xy[1])
+        g = points[i] # misc measurement point
+        #i = np.argmin(np.sqrt((X-g.x)**2 + (Y-g.y)**2)) # closest point on flowline
+
+        # should be able to just project point onto flowline and divide by total length
+        l = fl.ix[comid, 'geometry']
+        frac = l.project(g)/l.length
+        #frac = LineString(zip(X[:i+1], Y[:i+1])).length/LineString(zip(X[i:], Y[i:])).length
+        upstream_in_catchment = cmt.ix[comid, 'AreaSqKM'] * frac
+        total_upstream_area += upstream_in_catchment
+        upstream_area.append(total_upstream_area)
+
+    return upstream_area
+
 def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
     """Baseflow separation using the Institute of Hydrology method, as documented in
     Institute of Hydrology, 1980b, Low flow studies report no. 3--Research report: 

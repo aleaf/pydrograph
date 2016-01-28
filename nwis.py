@@ -163,9 +163,9 @@ class NWIS:
         url string
         """
         self.bbox_url = 'nw_longitude_va={:.3f}&'.format(self.ll_bbox[0]) +\
-                        'nw_latitude_va={:.3f}&'.format(self.ll_bbox[1]) +\
+                        'nw_latitude_va={:.3f}&'.format(self.ll_bbox[3]) +\
                         'se_longitude_va={:.3f}&'.format(self.ll_bbox[2]) +\
-                        'se_latitude_va={:.3f}&'.format(self.ll_bbox[3])
+                        'se_latitude_va={:.3f}&'.format(self.ll_bbox[1])
 
         self.stuff_at_beginning = 'coordinate_format={}&'.format(self.coordinate_format) +\
                                   'group_key={}&'.format(self.group_key) +\
@@ -449,7 +449,7 @@ class NWIS:
         indexQ90 = []
         X, Y = [], []
         for i in range(len(fm)):
-            mdt = fm.measurement_dt[i]
+            mdt = fm.measurement_dt.tolist()[i]
             Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
             for site_no, data in self.dvs.items():
 
@@ -473,12 +473,12 @@ class NWIS:
                 q90 = values.quantile(q=0.1)
 
                 # append last to avoid mismatches in length
-                site_info = field_sites.ix[fm.site_no[i]]
-                fm_site_no.append(fm.site_no[i])
+                site_info = field_sites.ix[fm.site_no.values[i]]
+                fm_site_no.append(fm.site_no.values[i])
                 station_nm.append(site_info['station_nm'])
-                Qm.append(fm.discharge_va[i])
-                measurement_dt.append(fm.measurement_dt[i])
-                measured_rating_diff.append(fm.measured_rating_diff[i])
+                Qm.append(fm.discharge_va.values[i])
+                measurement_dt.append(fm.measurement_dt.tolist()[i])
+                measured_rating_diff.append(fm.measured_rating_diff.values[i])
                 drainage_area.append(site_info['drain_area_va'])
                 index_station.append(site_no)
                 indexQr.append(Qr)
