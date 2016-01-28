@@ -1,7 +1,13 @@
 __author__ = 'aleaf'
 
 import datetime as dt
-import urllib2
+try:
+    # For Python 3.0 and later
+    from urllib.request import urlopen
+except ImportError:
+    # Fall back to Python 2's urllib2
+    from urllib2 import urlopen
+
 import numpy as np
 import pandas as pd
 import fiona
@@ -92,20 +98,20 @@ class NWIS:
             elif isinstance(extent, Polygon):
                 self.extent = extent
             else:
-                print 'Warning: extent argument of unknown datatype!'
+                print('Warning: extent argument of unknown datatype!')
                 self.extent = None
         else:
             self.extent = None
         if ll_bbox is None and self.extent is not None:
             self.ll_bbox = self.extent.bounds
         elif not ll_bbox and self.extent is None:
-            print 'Need bounding box or shapefile for NWIS queries.'
+            print('Need bounding box or shapefile for NWIS queries.')
             return
         else:
             pass
 
         if get_gw_sites or get_sw_sites:
-            print 'Fetching site info...'
+            print('Fetching site info...')
         if get_sw_sites:
             self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
             self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
@@ -140,12 +146,12 @@ class NWIS:
 
     def _read_extent_shapefile(self, shpfile, buffer=0):
 
-        print 'reading extent from {}...'.format(shpfile)
+        print('reading extent from {}...'.format(shpfile))
         shp = fiona.open(shpfile)
         g = shape(shp.next()['geometry'])
 
         if to_string(from_epsg(coord_datums_epsg[self.datum])) != to_string(shp.crs):
-            print 'reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj4)
+            print('reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj4))
             return project(g, to_string(shp.crs), self.proj4)
         else:
             return g
@@ -238,7 +244,7 @@ class NWIS:
         if end_date is not None:
             url += '&endDT={}'.format(end_date)
         url += '&parameterCd={}'.format(parameter_code)
-        print '{}'.format(url)
+        print('{}'.format(url))
         return url
 
 
@@ -260,13 +266,13 @@ class NWIS:
 
         url =  'http://nwis.waterdata.usgs.gov/nwis/{}?site_no={}&agency_cd=USGS&format=rdb'\
                 .format(txt, station_ID)
-        print '{}'.format(url)
+        print('{}'.format(url))
         return url
 
     def get_header_length(self, sitefile_text, col0):
         knt = 0
         for line in sitefile_text:
-            if not '#' in line and col0 in line:
+            if '#' not in str(line) and col0 in str(line):
                 knt += 2
                 break
             else:
@@ -292,7 +298,7 @@ class NWIS:
         the contents of an NWIS site information file in a dataframe format
         """
         url = self.make_site_url(data_type, attributes)
-        sitefile_text = urllib2.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, attributes[0])
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
 
@@ -310,7 +316,7 @@ class NWIS:
 
     @property
     def _get_dv_sites(self):
-        print 'Fetching info for sites with daily values...'
+        print('Fetching info for sites with daily values...')
         self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
 
     def _get_date_col(self, df):
@@ -334,14 +340,14 @@ class NWIS:
         -------
         dv: a datetime-index dataframe of daily discharge, with datagaps filled with NaNs
         """
-        if parameter_code in self.parameter_codes.keys():
+        if parameter_code in list(self.parameter_codes.keys()):
             parameter_code = self.parameter_codes[parameter_code]
 
         url = self.make_dv_url(station_ID, parameter_code=parameter_code,
                                start_date=start_date, end_date=end_date)
-        sitefile_text = urllib2.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
-        cols = sitefile_text[skiprows - 2].strip().split('\t')
+        cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         df.index = pd.to_datetime(df.datetime)
         return df
@@ -360,9 +366,9 @@ class NWIS:
         """
 
         url = self.make_measurements_url(station_ID, txt)
-        sitefile_text = urllib2.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
-        cols = sitefile_text[skiprows - 2].strip().split('\t')
+        cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
@@ -386,8 +392,8 @@ class NWIS:
         for station in stations:
             try:
                 df = self.get_dvs(station, parameter_code=parameter_code, start_date=start_date, end_date=end_date)
-            except Exception, e:
-                print e
+            except Exception as e:
+                print(e)
                 continue
             all_dvs[station] = df
         self.dvs = all_dvs
@@ -398,7 +404,7 @@ class NWIS:
         if len(self.dvs) == 0 and stations is not None:
             self.get_all_dvs(stations, start_date=start_date, end_date=end_date)
         Q90 = {}
-        for site_no, dvs in self.dvs.items():
+        for site_no, dvs in list(self.dvs.items()):
             DDcd = [c for c in dvs.columns if '00060' in c and 'cd' not in c][0]
             DDvalues = dvs[DDcd].convert_objects(convert_numeric=True)
             Q90[site_no] = DDvalues.quantile(0.1)
@@ -434,7 +440,7 @@ class NWIS:
         field_sites = self.field_sites.copy()
 
         # reprojected the output X, Y coordinates
-        print 'reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4)
+        print('reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4))
         if output_proj4 is not None:
             field_sites['geometry'] = projectdf(field_sites, self.proj4, output_proj4)
 
@@ -451,7 +457,7 @@ class NWIS:
         for i in range(len(fm)):
             mdt = fm.measurement_dt.tolist()[i]
             Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
-            for site_no, data in self.dvs.items():
+            for site_no, data in list(self.dvs.items()):
 
                 # check if index station covers measurement date
                 try:
@@ -460,7 +466,7 @@ class NWIS:
                     continue
                 dv = data.ix[Dt]
                 site_no = dv.site_no
-                DDcd = [k for k in data.keys() if '00060' in k and not 'cd' in k][0]
+                DDcd = [k for k in list(data.keys()) if '00060' in k and not 'cd' in k][0]
                 try:
                     Qr = float(dv[DDcd]) # handle ice and other non numbers
                 except:
