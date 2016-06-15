@@ -157,7 +157,7 @@ class NWIS:
         else:
             return g
 
-    def make_site_url(self, data_type, attributes):
+    def make_site_url(self, data_type, attributes=None):
         """
         Parameters
         ----------
@@ -191,8 +191,9 @@ class NWIS:
         url = self.urlbase + self.dtypes_dict[data_type]
         url += self.bbox_url
         url += self.stuff_at_beginning
-        for a in attributes:
-            url += 'column_name=' + a + '&'
+        if attributes is not None:
+            for a in attributes:
+                url += 'column_name=' + a + '&'
 
         if data_type == 'dv':
             url += self.dv_info
@@ -509,7 +510,7 @@ class NWIS:
                  'idx_station', 'indexQr', 'indexQ90', 'drn_area', 'station_nm', 'X', 'Y']]
         return df
 
-    def write_shp(self, df, shpname='NWIS_export.shp'):
+    def write_shp(self, df, shpname='NWIS_export.shp', **kwargs):
         """Write a shapefile of points from NWIS site file
 
         Parameters
