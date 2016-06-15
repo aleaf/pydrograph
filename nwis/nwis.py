@@ -47,7 +47,8 @@ class NWIS:
     dtypes_dict = {'dv': 'dv?referred_module=sw&site_tp_cd=ST&',
                    'field_measurements': 'measurements?',
                    'gwlevels': 'gwlevels?',
-                   'gwdv': 'dv?referred_module=gw&site_tp_cd=GW&'}
+                   'gwdv': 'dv?referred_module=gw&site_tp_cd=GW&',
+                   'inventory': 'inventory?'}
 
     parameter_codes = {'discharge': '00060',
                        'gwlevels': '72019'}
@@ -157,13 +158,14 @@ class NWIS:
         else:
             return g
 
-    def make_site_url(self, data_type, attributes=None):
+    def make_site_url(self, data_type='inventory', attributes=None):
         """
         Parameters
         ----------
         data_type: str
             'dv' for Daily Values
             'field_measurements' for Field Measurements
+            'inventory' for all measurements
 
         Returns
         -------
@@ -188,7 +190,7 @@ class NWIS:
                             'rdb_compression={}&'.format(self.rdb_compression) +\
                             'list_of_search_criteria={}'.format(self.list_of_search_criteria)
 
-        url = self.urlbase + self.dtypes_dict[data_type]
+        url = self.urlbase + self.dtypes_dict.get(data_type, data_type+'?')
         url += self.bbox_url
         url += self.stuff_at_beginning
         if attributes is not None:
@@ -377,7 +379,20 @@ class NWIS:
         return df
 
     def get_all_measurements(self, site_numbers, txt='measurements'):
+        """Get measurements for a list of site numbers.
 
+        Parameters
+        ----------
+        site_numbers : list or 1D array
+            USGS site numbers
+        txt : str
+            String in url specifying type of measurement
+            measurements : field measurements
+            dv : daily values
+            gwlevels : groundwater levels
+            qwdata : water quality data
+
+        """
         all_measurements = pd.DataFrame()
         for s in site_numbers:
             print(s)
@@ -386,7 +401,7 @@ class NWIS:
                                               names=['site_no', 'datetime'])
             df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
             all_measurements = all_measurements.append(df)
-        self.field_measurements = all_measurements
+        #self.field_measurements = all_measurements
         return all_measurements
 
     def get_all_dvs(self, stations, parameter_code='00060', start_date='1880-01-01', end_date=None):
