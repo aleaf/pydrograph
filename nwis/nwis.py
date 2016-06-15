@@ -1,7 +1,13 @@
 __author__ = 'aleaf'
 
 import datetime as dt
-#import urllib.request, urllib.error, urllib.parse
+try:
+    # For Python 3.0 and later
+    from urllib.request import urlopen
+except ImportError:
+    # Fall back to Python 2's urllib2
+    from urllib2 import urlopen
+
 import numpy as np
 import pandas as pd
 from shapely.geometry import Point, Polygon, shape
@@ -267,7 +273,7 @@ class NWIS:
     def get_header_length(self, sitefile_text, col0):
         knt = 0
         for line in sitefile_text:
-            if not '#' in line and col0 in line:
+            if '#' not in str(line) and col0 in str(line):
                 knt += 2
                 break
             else:
@@ -293,7 +299,7 @@ class NWIS:
         the contents of an NWIS site information file in a dataframe format
         """
         url = self.make_site_url(data_type, attributes)
-        sitefile_text = urllib.request.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, attributes[0])
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
 
@@ -340,9 +346,9 @@ class NWIS:
 
         url = self.make_dv_url(station_ID, parameter_code=parameter_code,
                                start_date=start_date, end_date=end_date)
-        sitefile_text = urllib.request.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
-        cols = sitefile_text[skiprows - 2].strip().split('\t')
+        cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         df.index = pd.to_datetime(df.datetime)
         return df
@@ -361,9 +367,9 @@ class NWIS:
         """
 
         url = self.make_measurements_url(station_ID, txt)
-        sitefile_text = urllib.request.urlopen(url).readlines()
+        sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
-        cols = sitefile_text[skiprows - 2].strip().split('\t')
+        cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
