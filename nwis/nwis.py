@@ -8,7 +8,7 @@ from shapely.geometry import Point, Polygon, shape
 import pyproj
 import GISio
 from GISops import project, projectdf
-from attributes import streamflow_attributes, gw_attributes
+from .attributes import streamflow_attributes, gw_attributes
 
 
 coord_datums_epsg = {'NAD83': 4269,
