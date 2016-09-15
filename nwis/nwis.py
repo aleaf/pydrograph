@@ -447,11 +447,15 @@ class NWIS:
         nm.index = nm.year
         return nm['n']
 
-    def baseflow_summary(self, q90_window=20, output_proj4=None):
+    def baseflow_summary(self, field_measurements=None, q90_window=20, output_proj4=None):
+
+        if field_measurements is not None:
+            self.field_measurements = field_measurements
 
         if self.field_measurements['measurement_dt'].dtype != 'datetime64[ns]':
             self.field_measurements['measurement_dt'] = \
                 pd.to_datetime(self.field_measurements.measurement_dt)
+
         fm = self.field_measurements
 
         field_sites = self.field_sites.copy()

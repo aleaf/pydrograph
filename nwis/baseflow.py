@@ -134,7 +134,7 @@ def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
     """
     if values.dtype.name == 'object':
         values = values.convert_objects(convert_numeric=True)
-    values = pd.DataFrame(values).resample('D')
+    values = pd.DataFrame(values).resample('D').mean()
     values.columns = ['discharge']
 
     # compute block numbers for grouping values on blocks
@@ -165,7 +165,7 @@ def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
     Q['n'] = Q.index
     Q.index = Q.datetime
 
-    Q = Q.dropna(subset=['datetime'], axis=0).resample('D')
+    Q = Q.dropna(subset=['datetime'], axis=0).resample('D').mean()
     if interp_semilog:
         QB = 10**(np.log10(Q.ordinate).interpolate()).values
     else:
