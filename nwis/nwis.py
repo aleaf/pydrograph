@@ -1,6 +1,7 @@
 __author__ = 'aleaf'
 
 import datetime as dt
+import time
 try:
     # For Python 3.0 and later
     from urllib.request import urlopen
@@ -289,7 +290,7 @@ class NWIS:
     def get_datetime_retrieved(self, sitefile_text):
         for line in sitefile_text:
             if 'retrieved' in str(line):
-                return str(line).strip().split(':')[-1]
+                return str(line).strip().split('retrieved:')[-1][:30].strip()
             elif '#' not in str(line):
                 return None
 
@@ -383,14 +384,14 @@ class NWIS:
         sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
-        loginfo = [station_ID, url, self.get_datetime_retrieved(sitefile_text)]
+        loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
             loginfo.append(True)
         else:
             loginfo.append(False)
-        self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+        self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
         return df
 
     def get_all_measurements(self, site_numbers, txt='measurements'):
@@ -419,7 +420,7 @@ class NWIS:
                                               names=['site_no', 'datetime'])
             df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
             all_measurements = all_measurements.append(df)
-        out_logfile = 'retrieved_{}_log.csv'.format(txt)
+        out_logfile = 'retrieved_{}_log_{}.csv'.format(txt, time.strftime('%Y%m%d%H%M%S'))
         self.log.to_csv(out_logfile, index=False)
         print('Log of query saved to {}'.format(out_logfile))
         return all_measurements
