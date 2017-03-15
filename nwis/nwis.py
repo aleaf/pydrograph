@@ -363,8 +363,14 @@ class NWIS:
         sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
+        loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
-        df.index = pd.to_datetime(df.datetime)
+        if len(df) > 0:
+            df.index = pd.to_datetime(df.datetime)
+            loginfo.append(True)
+        else:
+            loginfo.append(False)
+        self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
         return df
 
     def get_measurements(self, station_ID, txt='measurement'):
@@ -423,6 +429,7 @@ class NWIS:
         out_logfile = 'retrieved_{}_log_{}.csv'.format(txt, time.strftime('%Y%m%d%H%M%S'))
         self.log.to_csv(out_logfile, index=False)
         print('Log of query saved to {}'.format(out_logfile))
+        self.log = pd.DataFrame(columns=self.log_cols) # reset the log
         return all_measurements
 
     def get_all_dvs(self, stations, parameter_code='00060', start_date='1880-01-01', end_date=None):
@@ -435,6 +442,11 @@ class NWIS:
                 continue
             all_dvs[station] = df
         self.dvs = all_dvs
+        out_logfile = 'retrieved_{}_dvs_log_{}.csv'.format(parameter_code,
+                                                       time.strftime('%Y%m%d%H%M%S'))
+        self.log.to_csv(out_logfile, index=False)
+        print('Log of query saved to {}'.format(out_logfile))
+        self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
         return all_dvs
 
     def q90(self, stations=None, start_date='1880-01-01', end_date=None):
