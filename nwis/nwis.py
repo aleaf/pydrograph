@@ -73,6 +73,8 @@ class NWIS:
     rdb_compression = 'file' #'rdb_compression=file'
     list_of_search_criteria = 'lat_long_bounding_box' #'list_of_search_criteria=lat_long_bounding_box'
 
+    log_cols = ['site_no', 'url', 'retrieved', 'data_found']
+
     def __init__(self, ll_bbox=None, extent=None, datum='NAD83',
                  get_sw_sites=True, get_gw_sites=True):
         """Class for retrieving data from NWIS.
@@ -122,6 +124,7 @@ class NWIS:
         self.gwlevels = pd.DataFrame()
         self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
         self.dv_q90 = {} # q90 flows for daily values stations, keyed by site no
+        self.log = pd.DataFrame(columns=self.log_cols)
 
     def _compute_geometries(self, df):
 
@@ -283,6 +286,13 @@ class NWIS:
                 knt += 1
         return knt
 
+    def get_datetime_retrieved(self, sitefile_text):
+        for line in sitefile_text:
+            if 'retrieved' in str(line):
+                return str(line).strip().split(':')[-1]
+            elif '#' not in str(line):
+                return None
+
     def get_siteinfo(self, data_type, attributes):
         """Retrieves site information for the bounding box supplied to the NWIS class instance
 
@@ -373,9 +383,14 @@ class NWIS:
         sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
+        loginfo = [station_ID, url, self.get_datetime_retrieved(sitefile_text)]
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
+            loginfo.append(True)
+        else:
+            loginfo.append(False)
+        self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
         return df
 
     def get_all_measurements(self, site_numbers, txt='measurements'):
@@ -397,11 +412,16 @@ class NWIS:
         for s in site_numbers:
             print(s)
             df = self.get_measurements(s, txt=txt)
+            if len(df) == 0:
+                print('no data returned.')
+                continue
             df.index = pd.MultiIndex.from_product([[df.site_no.values[0]], df.index.values],
                                               names=['site_no', 'datetime'])
             df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
             all_measurements = all_measurements.append(df)
-        #self.field_measurements = all_measurements
+        out_logfile = 'retrieved_{}_log.csv'.format(txt)
+        self.log.to_csv(out_logfile, index=False)
+        print('Log of query saved to {}'.format(out_logfile))
         return all_measurements
 
     def get_all_dvs(self, stations, parameter_code='00060', start_date='1880-01-01', end_date=None):
