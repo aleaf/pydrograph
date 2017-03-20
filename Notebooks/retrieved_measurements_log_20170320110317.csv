@@ -1,0 +1,7 @@
+site_no,url,retrieved,data_found
+4015475,http://waterservices.usgs.gov/nwis/dv/?format=rdb&sites=04015475&startDT=1880-01-01&parameterCd=00060,2017-03-20 12:03:07 -04:00\t(,True
+4015410,http://nwis.waterdata.usgs.gov/nwis/measurements?site_no=04015410&agency_cd=USGS&format=rdb,,True
+4015415,http://nwis.waterdata.usgs.gov/nwis/measurements?site_no=04015415&agency_cd=USGS&format=rdb,,True
+4015430,http://nwis.waterdata.usgs.gov/nwis/measurements?site_no=04015430&agency_cd=USGS&format=rdb,,True
+4015438,http://nwis.waterdata.usgs.gov/nwis/measurements?site_no=04015438&agency_cd=USGS&format=rdb,,True
+4015439,http://nwis.waterdata.usgs.gov/nwis/measurements?site_no=04015439&agency_cd=USGS&format=rdb,,True
