@@ -39,9 +39,9 @@ class NWIS:
     P     Poor         The data are >8% (percent) of the actual flow
     """
 
-    est_error = {'EXCELLENT': 0.02,
-                 'GOOD': 0.05,
-                 'FAIR': 0.08}
+    est_error = {'excellent': 0.02,
+                 'good': 0.05,
+                 'fair': 0.08}
     default_error = 0.50
 
     urlbase = 'http://nwis.waterdata.usgs.gov/usa/nwis/'
@@ -557,7 +557,7 @@ class NWIS:
                            'indexQ90': indexQ90,
                            'X': X,
                            'Y': Y})
-        df['est_error'] = [self.est_error.get(q, self.default_error) for q in df.quality]
+        df['est_error'] = [self.est_error.get(q.lower(), self.default_error) for q in df.quality]
         df = df[['site_no', 'datetime', 'Qm', 'quality', 'est_error',
                  'idx_station', 'indexQr', 'indexQ90', 'drn_area', 'station_nm', 'X', 'Y']]
         return df
