@@ -480,16 +480,19 @@ class NWIS:
         nm.index = nm.year
         return nm['n']
 
-    def baseflow_summary(self, field_measurements=None, q90_window=20, output_proj4=None):
+    def baseflow_summary(self, field_measurements=None, dvs=None, q90_window=20, output_proj4=None):
 
-        if field_measurements is not None:
-            self.field_measurements = field_measurements
+        if field_measurements is None:
+            fm = self.field_measurements
+        else:
+            fm = field_measurements
 
-        if self.field_measurements['measurement_dt'].dtype != 'datetime64[ns]':
-            self.field_measurements['measurement_dt'] = \
-                pd.to_datetime(self.field_measurements.measurement_dt)
+        if dvs is None:
+            dvs = self.dvs
 
-        fm = self.field_measurements
+        if fm['measurement_dt'].dtype != 'datetime64[ns]':
+            fm['measurement_dt'] = pd.to_datetime(fm.measurement_dt)
+
 
         field_sites = self.field_sites.copy()
 
@@ -511,7 +514,7 @@ class NWIS:
         for i in range(len(fm)):
             mdt = fm.measurement_dt.tolist()[i]
             Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
-            for site_no, data in list(self.dvs.items()):
+            for site_no, data in list(dvs.items()):
 
                 # check if index station covers measurement date
                 try:
