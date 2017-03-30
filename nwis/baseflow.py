@@ -86,7 +86,7 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
 
     return upstream_area
 
-def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
+def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
     """Baseflow separation using the Institute of Hydrology method, as documented in
     Institute of Hydrology, 1980b, Low flow studies report no. 3--Research report: 
     Wallingford, Oxon, United Kingdom, Institute of Hydrology Report no. 3, p. 12-19,
@@ -97,7 +97,7 @@ def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
     
     Parameters
     ----------
-    values : pandas Series
+    Qseries : pandas Series
         Pandas time series (with datetime index) containing measured streamflow values.
     block_length : int
         N parameter in IH method. Streamflow is partitioned into N-day intervals;
@@ -107,12 +107,13 @@ def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
         is less than the adjacent two values, the central value is considered a 
         turning point. Baseflow is interpolated between the turning points.
     interp_semilog : boolean
-        If False, linear interpolation is used to compute baseflow between turning points
+        If False, linear interpolation is used to compute baseflow between  turning points
         (as documented in the IH method). If True, the base-10 logs of the turning points
         are interpolated, and the interpolated values are transformed back to 
         linear space (producing a curved hydrograph). Semi-logarithmic interpolation
         as documented in Wahl and Wahl (1988), is used in the Base-Flow Index (BFI)
-        fortran program.
+        fortran program. This method reassigns zero values to -2 in log space (0.01)
+        for
     
     Returns
     -------
@@ -132,48 +133,66 @@ def IHmethod(values, block_length=5, tp=0.9, interp_semilog=True):
     will differ from those produced by the BFI program.
     
     """
-    if values.dtype.name == 'object':
-        values = values.convert_objects(convert_numeric=True)
-    values = pd.DataFrame(values).resample('D').mean()
-    values.columns = ['discharge']
+    # convert flow values to numeric if they are objects
+    # (pandas will cast column as objects if there are strings such as "ICE")
+    # coerce any strings into np.nan values
+    if Qseries.dtype.name == 'object':
+        Qseries = pd.to_numeric(Qseries, errors='coerce')
+
+    # convert the series to a dataframe; resample to daily values
+    # missing days will be filled with nan values
+    df = pd.DataFrame(Qseries).resample('D').mean()
+    df.columns = ['Q']
 
     # compute block numbers for grouping values on blocks
-    #nblocks = int(len(values) / float(block_length) + 1)
-    nblocks = int(np.floor(len(values) / float(block_length)))
+    nblocks = int(np.floor(len(df) / float(block_length)))
+
+    # make list of ints, one per measurement, denoting the block
+    # eg [1,1,1,1,1,2,2,2,2,2...] for block_length = 5
     n = []
     for i in range(nblocks):
-        n += [i+1] * block_length
-    #values['n'] = n[:len(values)]
-    n += [np.nan] * (len(values) - len(n))
-    values['n'] = n
-    
-    # compute minima for block_length day blocks
-    Q = [np.min(values.discharge.values[i-block_length:i]) 
-         for i in np.arange(block_length, len(values))[::block_length]]
+        n += [i + 1] * block_length
+    n += [np.nan] * (len(df) - len(n))  # pad any leftover values with nans
+    df['n'] = n
 
-    #  compute the minimum for each block
-    Q = values.groupby('n').min()
-    Q['datetime'] = values[['discharge', 'n']].groupby('n').idxmin() # include dates of minimum values
-
-    Q['ordinate'] = [np.nan] * len(Q)
-    #for i in range(len(Q))[:-2]:
-    #    end1, cv, end2 = Q.discharge[i:i+3]
-    for i in np.arange(1, len(Q)-1):
-        end1, cv, end2 = Q.discharge.values[i-1:i+2]
-        if tp * cv < end1 and tp * cv < end2:
-            Q.loc[Q.index[i], 'ordinate'] = cv
+    # compute the minimum for each block
+    # create dataframe Q, which only has minimums for each block
+    Q = df.groupby('n').min()
+    Q = Q.rename(columns={'Q': 'block_Qmin'})
     Q['n'] = Q.index
+    Q['datetime'] = df[['Q', 'n']].groupby('n').idxmin()  # include dates of minimum values
+
+    # compute baseflow ordinates
+    Q['ordinate'] = [np.nan] * len(Q)
+    Qlist = Q.block_Qmin.tolist()
+    Q['Qi-1'] = [np.nan] + Qlist[:-2] + [np.nan]
+    Q['Qi'] = [np.nan] + Qlist[1:-1] + [np.nan]
+    Q['Qi+1'] = [np.nan] + Qlist[2:] + [np.nan]
+    isordinate = tp * Q.Qi < Q[['Qi-1', 'Qi+1']].min(axis=1)
+    Q.loc[isordinate, 'ordinate'] = Q.loc[isordinate, 'block_Qmin']
+
+    # reset the index of Q to datetime
     Q.index = Q.datetime
 
+    # expand Q dataframe back out to include row for each day
     Q = Q.dropna(subset=['datetime'], axis=0).resample('D').mean()
+
+    # interpolate between baseflow ordinates
     if interp_semilog:
-        QB = 10**(np.log10(Q.ordinate).interpolate()).values
+        iszero = Q.ordinate.values == 0
+        logQ = np.log10(Q.ordinate)
+        logQ[iszero] = -2
+        QB = np.power(10.0, logQ.interpolate(limit=100).values)
     else:
         QB = Q.ordinate.interpolate(limit=100).values
     Q['QB'] = QB
-    Q['Q'] = values.discharge[Q.index]
+
+    # reassign the original flow values back to Q
+    Q['Q'] = df.Q.loc[Q.index]
+
+    # ensure that no baseflow values are > Q measured
     QBgreaterthanQ = Q.QB.values > Q.Q.values
-    Q.loc[QBgreaterthanQ, 'QB'] = Q.ix[QBgreaterthanQ, 'Q']
+    Q.loc[QBgreaterthanQ, 'QB'] = Q.loc[QBgreaterthanQ, 'Q']
     return Q
 
 def WI_statewide_eqn(Qm, A, Qr, Q90):
