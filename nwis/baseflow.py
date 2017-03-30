@@ -113,7 +113,7 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
         linear space (producing a curved hydrograph). Semi-logarithmic interpolation
         as documented in Wahl and Wahl (1988), is used in the Base-Flow Index (BFI)
         fortran program. This method reassigns zero values to -2 in log space (0.01)
-        for
+        for the interpolation.
     
     Returns
     -------
