@@ -94,6 +94,7 @@ class NWIS:
         self.ll_bbox = ll_bbox
         self.datum = datum
         self.proj4 = coord_datums_proj4[self.datum]
+        self.log = pd.DataFrame(columns=self.log_cols)
         if extent is not None:
             if isinstance(extent, str):
                 self.extent = self._read_extent_shapefile(extent)
@@ -125,7 +126,6 @@ class NWIS:
         self.gwlevels = pd.DataFrame()
         self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
         self.dv_q90 = {} # q90 flows for daily values stations, keyed by site no
-        self.log = pd.DataFrame(columns=self.log_cols)
 
     def _compute_geometries(self, df):
 
@@ -243,7 +243,7 @@ class NWIS:
             return station_ID
 
         #station_IDs = ','.join(['0{}'.format(int(str(s))) for s in station_IDs])
-        station_IDs = ','.join([self._correct_stationID(s) for s in station_IDs])
+        station_IDs = ','.join([NWIS.correct_stationID(s) for s in station_IDs])
 
         url = 'http://waterservices.usgs.gov/nwis/dv/?format=rdb'
 
@@ -270,7 +270,7 @@ class NWIS:
             'gwlevels' for field measurements of groundwater level
 
         """
-        station_ID = self._correct_stationID(station_ID)
+        station_ID = NWIS.correct_stationID(station_ID)
 
         url =  'http://nwis.waterdata.usgs.gov/nwis/{}?site_no={}&agency_cd=USGS&format=rdb'\
                 .format(txt, station_ID)
@@ -323,11 +323,6 @@ class NWIS:
             within = np.array([g.within(self.extent) for g in df.geometry])
             return df[within].copy()
         return df
-
-    def _correct_stationID(self, stationID):
-        if 1 < int(str(stationID)[0]) < 10 and len(str(stationID)) < 15:
-            return '0{}'.format(stationID)
-        return str(stationID)
 
     @property
     def _get_dv_sites(self):
@@ -585,6 +580,12 @@ class NWIS:
         shpdf = df.copy()
         shpdf['geometry'] = [Point(r.dec_long_va, r.dec_lat_va) for i, r in shpdf.iterrows()]
         GISio.df2shp(shpdf, shpname, epsg=4269)
+
+    @staticmethod
+    def correct_stationID(stationID):
+        if 1 < int(str(stationID)[0]) < 10 and len(str(stationID)) < 15:
+            return '0{}'.format(stationID)
+        return str(stationID)
 
 '''
 field measurements url:
