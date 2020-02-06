@@ -2,19 +2,12 @@ __author__ = 'aleaf'
 
 import datetime as dt
 import time
-try:
-    # For Python 3.0 and later
-    from urllib.request import urlopen
-except ImportError:
-    # Fall back to Python 2's urllib2
-    from urllib2 import urlopen
-
+from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 from shapely.geometry import Point, Polygon, shape
 import pyproj
-import GISio
-from GISops import project, projectdf
+import gisutils
 from .attributes import streamflow_attributes, gw_attributes
 
 
@@ -24,13 +17,14 @@ coord_datums_epsg = {'NAD83': 4269,
 coord_datums_proj4 = {'NAD83': '+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs',
                      'NAD27': '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs'}
 
+
 def WI_statewide_eqn(Qm, A, Qr, Q90):
     Bf = (Qm / A) * (Q90 / Qr)
     Qb = 0.907 * A**1.02 * Bf**0.52
     return Qb.copy(), Bf.copy()
 
 
-class NWIS:
+class Nwis:
     """
     NWIS error codes:
     E     Excellent    The data is within 2% (percent) of the actual flow
@@ -77,7 +71,7 @@ class NWIS:
     log_cols = ['site_no', 'url', 'retrieved', 'data_found']
 
     def __init__(self, ll_bbox=None, extent=None, datum='NAD83',
-                 get_sw_sites=True, get_gw_sites=True):
+                 get_sw_sites=True, get_gw_sites=True, log=False):
         """Class for retrieving data from NWIS.
         Currently only retrieves data within a specified lat/lon bounding box.
 
@@ -122,6 +116,7 @@ class NWIS:
             self.gwfield_sites = self.get_siteinfo('gwlevels', gw_attributes)
             self.gwdv_sites = self.get_siteinfo('gwdv', gw_attributes)
 
+        self.write_log_file = log
         self.field_measurements = pd.DataFrame() # dataframe of all field measurements for area
         self.gwlevels = pd.DataFrame()
         self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
@@ -133,9 +128,12 @@ class NWIS:
         for i in range(len(df)):
 
             p = Point(df.dec_long_va[i], df.dec_lat_va[i])
-            pr1 = "+init=EPSG:{}".format(coord_datums_epsg[df.dec_coord_datum_cd[i]])
+            try:
+                pr1 = "+init=EPSG:{}".format(coord_datums_epsg[df.dec_coord_datum_cd[i]])
+            except:
+                j=2
             pr2 = self.proj4
-            geom = project(p, pr1, pr2)
+            geom = gisutils.project(p, pr1, pr2)
             geoms.append(geom)
         return geoms
 
@@ -158,7 +156,7 @@ class NWIS:
 
         if to_string(from_epsg(coord_datums_epsg[self.datum])) != to_string(shp.crs):
             print('reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj4))
-            return project(g, to_string(shp.crs), self.proj4)
+            return gisutils.project(g, to_string(shp.crs), self.proj4)
         else:
             return g
 
@@ -243,7 +241,7 @@ class NWIS:
             return station_ID
 
         #station_IDs = ','.join(['0{}'.format(int(str(s))) for s in station_IDs])
-        station_IDs = ','.join([NWIS.correct_stationID(s) for s in station_IDs])
+        station_IDs = ','.join([Nwis.correct_stationID(s) for s in station_IDs])
 
         url = 'http://waterservices.usgs.gov/nwis/dv/?format=rdb'
 
@@ -254,7 +252,6 @@ class NWIS:
         url += '&parameterCd={}'.format(parameter_code)
         print('{}'.format(url))
         return url
-
 
     def make_measurements_url(self, station_ID, txt='measurements'):
         """Creates url to retrieve daily values for a site
@@ -270,7 +267,7 @@ class NWIS:
             'gwlevels' for field measurements of groundwater level
 
         """
-        station_ID = NWIS.correct_stationID(station_ID)
+        station_ID = Nwis.correct_stationID(station_ID)
 
         url =  'http://nwis.waterdata.usgs.gov/nwis/{}?site_no={}&agency_cd=USGS&format=rdb'\
                 .format(txt, station_ID)
@@ -421,10 +418,11 @@ class NWIS:
                                               names=['site_no', 'datetime'])
             df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
             all_measurements = all_measurements.append(df)
-        out_logfile = 'retrieved_{}_log_{}.csv'.format(txt, time.strftime('%Y%m%d%H%M%S'))
-        self.log.to_csv(out_logfile, index=False)
-        print('Log of query saved to {}'.format(out_logfile))
-        self.log = pd.DataFrame(columns=self.log_cols) # reset the log
+        if self.write_log_file:
+            out_logfile = 'retrieved_{}_log_{}.csv'.format(txt, time.strftime('%Y%m%d%H%M%S'))
+            self.log.to_csv(out_logfile, index=False)
+            print('Log of query saved to {}'.format(out_logfile))
+            self.log = pd.DataFrame(columns=self.log_cols) # reset the log
         return all_measurements
 
     def get_all_dvs(self, stations, parameter_code='00060', start_date='1880-01-01', end_date=None):
@@ -437,10 +435,11 @@ class NWIS:
                 continue
             all_dvs[station] = df
         self.dvs = all_dvs
-        out_logfile = 'retrieved_{}_dvs_log_{}.csv'.format(parameter_code,
-                                                       time.strftime('%Y%m%d%H%M%S'))
-        self.log.to_csv(out_logfile, index=False)
-        print('Log of query saved to {}'.format(out_logfile))
+        if self.write_log_file:
+            out_logfile = 'retrieved_{}_dvs_log_{}.csv'.format(parameter_code,
+                                                           time.strftime('%Y%m%d%H%M%S'))
+            self.log.to_csv(out_logfile, index=False)
+            print('Log of query saved to {}'.format(out_logfile))
         self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
         return all_dvs
 
@@ -494,7 +493,7 @@ class NWIS:
         # reprojected the output X, Y coordinates
         print('reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4))
         if output_proj4 is not None:
-            field_sites['geometry'] = projectdf(field_sites, self.proj4, output_proj4)
+            field_sites['geometry'] = gisutils.project(field_sites, self.proj4, output_proj4)
 
         fm_site_no = []
         Qm = []
@@ -579,12 +578,15 @@ class NWIS:
         """
         shpdf = df.copy()
         shpdf['geometry'] = [Point(r.dec_long_va, r.dec_lat_va) for i, r in shpdf.iterrows()]
-        GISio.df2shp(shpdf, shpname, epsg=4269)
+        gisutils.df2shp(shpdf, shpname, epsg=4269)
 
     @staticmethod
     def correct_stationID(stationID):
-        if 1 < int(str(stationID)[0]) < 10 and len(str(stationID)) < 15:
-            return '0{}'.format(stationID)
+        try:
+            if 1 < int(str(stationID)[0]) < 10 and len(str(stationID)) < 15:
+                return '0{}'.format(stationID)
+        except:
+            j=2
         return str(stationID)
 
 '''

@@ -1,0 +1,16 @@
+# List required packages in this file, one per line.
+ipython
+jupyter
+notebook
+ipykernel
+numpy
+pandas
+fiona
+shapely
+rtree
+pyproj>=2.0
+pytest
+ipython
+matplotlib
+pip
+gis-utils

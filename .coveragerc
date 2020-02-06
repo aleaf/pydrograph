@@ -1,0 +1,6 @@
+[run]
+source = pydrograph
+[report]
+omit = /Users/aleaf/Documents/GitHub/gisutils/*
+       pydrograph/_version.py
+    

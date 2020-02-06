@@ -1,0 +1,1 @@
+Package for getting and processing stream flow and groundwater level measurements from the USGS National Water Information System (NWIS). 

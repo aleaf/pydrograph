@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+
 def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=None):
     """For each point in points, get upstream drainage area in km2, using
     NHDPlus PlusFlow routing table and NHDPlus Catchment areas. Upstream area
@@ -85,6 +86,7 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
         upstream_area.append(total_upstream_area)
 
     return upstream_area
+
 
 def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
     """Baseflow separation using the Institute of Hydrology method, as documented in
@@ -194,6 +196,7 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
     QBgreaterthanQ = Q.QB.values > Q.Q.values
     Q.loc[QBgreaterthanQ, 'QB'] = Q.loc[QBgreaterthanQ, 'Q']
     return Q
+
 
 def WI_statewide_eqn(Qm, A, Qr, Q90):
     """Regression equation of Gebert and others (2007, 2011)
