@@ -1,6 +1,7 @@
 import os
 import shutil
 import pytest
+from .test_examples import nwis_instance, extent_poly, field_sites
 
 
 @pytest.fixture(scope="session")

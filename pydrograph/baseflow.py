@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import gisutils
 
 
 def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=None):
@@ -236,3 +237,81 @@ def WI_statewide_eqn(Qm, A, Qr, Q90):
     Bf = (Qm / A) * (Q90 / Qr)
     Qb = 0.907 * A**1.02 * Bf**0.52
     return Qb.copy(), Bf.copy()
+
+
+def baseflow_summary(self, field_sites, field_measurements, daily_values, q90_window=20, output_proj4=None):
+
+    fm = field_measurements
+    dvs = daily_values
+
+    if fm['measurement_dt'].dtype != 'datetime64[ns]':
+        fm['measurement_dt'] = pd.to_datetime(fm.measurement_dt)
+
+    # reprojected the output X, Y coordinates
+    print('reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4))
+    if output_proj4 is not None:
+        field_sites['geometry'] = gisutils.project(field_sites, self.proj4, output_proj4)
+
+    fm_site_no = []
+    Qm = []
+    measurement_dt = []
+    measured_rating_diff = []
+    drainage_area = []
+    station_nm = []
+    index_station = []
+    indexQr = []
+    indexQ90 = []
+    X, Y = [], []
+    for i in range(len(fm)):
+        mdt = fm.measurement_dt.tolist()[i]
+        Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
+        for site_no, data in list(dvs.items()):
+
+            # check if index station covers measurement date
+            try:
+                dv = data.ix[Dt]
+            except KeyError:
+                continue
+            dv = data.ix[Dt]
+            site_no = dv.site_no
+            DDcd = [k for k in list(data.keys()) if '00060' in k and not 'cd' in k][0]
+            try:
+                Qr = float(dv[DDcd]) # handle ice and other non numbers
+            except:
+                continue
+
+            # get q90 values for window
+            q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window, unit='Y')
+            q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window, unit='Y')
+            values = pd.to_numeric(data.ix[q90start:q90end, DDcd], errors='coerce')
+            q90 = values.quantile(q=0.1)
+
+            # append last to avoid mismatches in length
+            site_info = field_sites.ix[fm.site_no.values[i]]
+            fm_site_no.append(fm.site_no.values[i])
+            station_nm.append(site_info['station_nm'])
+            Qm.append(fm.discharge_va.values[i])
+            measurement_dt.append(fm.measurement_dt.tolist()[i])
+            measured_rating_diff.append(fm.measured_rating_diff.values[i])
+            drainage_area.append(site_info['drain_area_va'])
+            index_station.append(site_no)
+            indexQr.append(Qr)
+            indexQ90.append(q90)
+            X.append(site_info['geometry'].xy[0][0])
+            Y.append(site_info['geometry'].xy[1][0])
+
+    df = pd.DataFrame({'site_no': fm_site_no,
+                       'station_nm': station_nm,
+                       'datetime': measurement_dt,
+                       'Qm': Qm,
+                       'quality': measured_rating_diff,
+                       'drn_area': drainage_area,
+                       'idx_station': index_station,
+                       'indexQr': indexQr,
+                       'indexQ90': indexQ90,
+                       'X': X,
+                       'Y': Y})
+    df['est_error'] = [self.est_error.get(q.lower(), self.default_error) for q in df.quality]
+    df = df[['site_no', 'datetime', 'Qm', 'quality', 'est_error',
+             'idx_station', 'indexQr', 'indexQ90', 'drn_area', 'station_nm', 'X', 'Y']]
+    return df

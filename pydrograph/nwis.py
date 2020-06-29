@@ -14,7 +14,7 @@ from .attributes import streamflow_attributes, gw_attributes
 coord_datums_epsg = {'NAD83': 4269,
                      'NAD27': 4267}
 
-coord_datums_proj4 = {'NAD83': '+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs',
+coord_datums_proj_str = {'NAD83': '+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs',
                      'NAD27': '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs'}
 
 
@@ -35,14 +35,17 @@ class Nwis:
 
     est_error = {'excellent': 0.02,
                  'good': 0.05,
-                 'fair': 0.08}
+                 'fair': 0.08
+                 }
     default_error = 0.50
 
     urlbase = 'http://nwis.waterdata.usgs.gov/usa/nwis/'
     dtypes_dict = {'dv': 'dv?referred_module=sw&site_tp_cd=ST&',
+                   'daily_values': 'dv?referred_module=sw&site_tp_cd=ST&',
                    'field_measurements': 'measurements?',
                    'gwlevels': 'gwlevels?',
                    'gwdv': 'dv?referred_module=gw&site_tp_cd=GW&',
+                   'gw_daily_values': 'dv?referred_module=gw&site_tp_cd=GW&',
                    'inventory': 'inventory?'}
 
     parameter_codes = {'discharge': '00060',
@@ -70,71 +73,76 @@ class Nwis:
 
     log_cols = ['site_no', 'url', 'retrieved', 'data_found']
 
-    def __init__(self, ll_bbox=None, extent=None, datum='NAD83',
-                 get_sw_sites=True, get_gw_sites=True, log=False):
+    def __init__(self, bounds_latlon=None, extent=None, datum='NAD83',
+                 log=False):
         """Class for retrieving data from NWIS.
-        Currently only retrieves data within a specified lat/lon bounding box.
 
         Parameters
         ----------
-        ll_bbox: list of floats
-            List containing bounding latitudes and longitudes in decimal degrees, in the following order:
+        bounds_latlon: sequence of floats
+            Sequence containing bounding latitudes and longitudes of query area
+            in decimal degrees, in the following order:
             [northwest longitude, northwest latitude, southeast longitude, southeast latitude]
-
+        extent: filepath (str) or shapely polygon
+            Polygon of area to query. A polygon from a shapefile
+            will be automatically reprojected to lat/lon (epsg:4269);
+            shapely polygons are assumed to be in geographic coordinates.
 
         see the code for a list of default parameters
         """
 
-        self.ll_bbox = ll_bbox
+        self.bounds_latlon = bounds_latlon
         self.datum = datum
-        self.proj4 = coord_datums_proj4[self.datum]
+        self.proj_str = coord_datums_proj_str[self.datum]
         self.log = pd.DataFrame(columns=self.log_cols)
+        self._extent = None
+        self.extent = extent
+        self._bounds_latlon = None
+        self.bounds_latlon = bounds_latlon
+        self.write_log_file = log
+
+    @property
+    def extent(self):
+        """Polygon of query area in lat/lon (epsg:4269)"""
+        return self._extent
+
+    @extent.setter
+    def extent(self, extent=None):
         if extent is not None:
             if isinstance(extent, str):
-                self.extent = self._read_extent_shapefile(extent)
+                # _read_extent_shapefile should automatically reproject to 4269
+                self._extent = self._read_extent_shapefile(extent)
             elif isinstance(extent, Polygon):
-                self.extent = extent
+                self._extent = extent
             else:
                 print('Warning: extent argument of unknown datatype!')
-                self.extent = None
+                self._extent = None
         else:
-            self.extent = None
-        if ll_bbox is None and self.extent is not None:
-            self.ll_bbox = self.extent.bounds
-        elif not ll_bbox and self.extent is None:
-            print('Need bounding box or shapefile for NWIS queries.')
-            return
-        else:
-            pass
+            self._extent = None
 
-        if get_gw_sites or get_sw_sites:
-            print('Fetching site info...')
-        if get_sw_sites:
-            self.field_sites = self.get_siteinfo('field_measurements', streamflow_attributes)
-            self.dv_sites = self.get_siteinfo('dv', streamflow_attributes)
-        if get_gw_sites:
-            self.gwfield_sites = self.get_siteinfo('gwlevels', gw_attributes)
-            self.gwdv_sites = self.get_siteinfo('gwdv', gw_attributes)
+    @property
+    def bounds_latlon(self):
+        """Bounding box of query area in lat/lon (epsg:4269)"""
+        if self._bounds_latlon is None and self.extent is not None:
+            self._bounds_latlon = self.extent.bounds
+        return self._bounds_latlon
 
-        self.write_log_file = log
-        self.field_measurements = pd.DataFrame() # dataframe of all field measurements for area
-        self.gwlevels = pd.DataFrame()
-        self.dvs = {} # dictionary with dataframes of daily values for all dv sites, keyed by site no
-        self.dv_q90 = {} # q90 flows for daily values stations, keyed by site no
+    @bounds_latlon.setter
+    def bounds_latlon(self, bounds_latlon=None):
+        self._bounds_latlon = bounds_latlon
 
     def _compute_geometries(self, df):
 
-        geoms = []
-        for i in range(len(df)):
-
-            p = Point(df.dec_long_va[i], df.dec_lat_va[i])
-            try:
-                pr1 = "+init=EPSG:{}".format(coord_datums_epsg[df.dec_coord_datum_cd[i]])
-            except:
-                j=2
-            pr2 = self.proj4
-            geom = gisutils.project(p, pr1, pr2)
-            geoms.append(geom)
+        datum = np.array([coord_datums_epsg[d] for d in df.dec_coord_datum_cd])
+        datums = set(datum)
+        x1, y1 = df.dec_long_va.values, df.dec_lat_va.values
+        x2 = np.ones(len(df), dtype=float) * np.nan
+        y2 = np.ones(len(df), dtype=float) * np.nan
+        for dtm in datums:
+            pr1 = "epsg:{}".format(dtm)
+            loc = datum == dtm
+            x2[loc], y2[loc] = gisutils.project((x1[loc], y1[loc]), pr1, self.proj_str)
+        geoms = [Point(x, y) for x, y in zip(x2, y2)]
         return geoms
 
     def _cull_to_extent(self, df):
@@ -155,8 +163,8 @@ class Nwis:
         g = shape(shp.next()['geometry'])
 
         if to_string(from_epsg(coord_datums_epsg[self.datum])) != to_string(shp.crs):
-            print('reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj4))
-            return gisutils.project(g, to_string(shp.crs), self.proj4)
+            print('reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj_str))
+            return gisutils.project(g, to_string(shp.crs), self.proj_str)
         else:
             return g
 
@@ -173,10 +181,10 @@ class Nwis:
         -------
         url string
         """
-        self.bbox_url = 'nw_longitude_va={:.3f}&'.format(self.ll_bbox[0]) +\
-                        'nw_latitude_va={:.3f}&'.format(self.ll_bbox[3]) +\
-                        'se_longitude_va={:.3f}&'.format(self.ll_bbox[2]) +\
-                        'se_latitude_va={:.3f}&'.format(self.ll_bbox[1])
+        self.bbox_url = 'nw_longitude_va={:.3f}&'.format(self.bounds_latlon[0]) +\
+                        'nw_latitude_va={:.3f}&'.format(self.bounds_latlon[3]) +\
+                        'se_longitude_va={:.3f}&'.format(self.bounds_latlon[2]) +\
+                        'se_latitude_va={:.3f}&'.format(self.bounds_latlon[1])
 
         self.stuff_at_beginning = 'coordinate_format={}&'.format(self.coordinate_format) +\
                                   'group_key={}&'.format(self.group_key) +\
@@ -199,7 +207,7 @@ class Nwis:
             for a in attributes:
                 url += 'column_name=' + a + '&'
 
-        if data_type == 'dv':
+        if data_type in {'dv', 'daily_values'}:
             url += self.dv_info
 
         url += self.stuff_at_end
@@ -291,14 +299,16 @@ class Nwis:
             elif '#' not in str(line):
                 return None
 
-    def get_siteinfo(self, data_type, attributes):
+    def get_siteinfo(self, data_type, attributes=None):
         """Retrieves site information for the bounding box supplied to the NWIS class instance
 
         Parameters
         ----------
         data_type: str
-            'dv' for Daily Values
+            'daily_values' for Daily Values
             'field_measurements' for Field Measurements
+            'gwlevels' for groundwater field measurements
+            'gwdv' for groundwater daily values
 
         attributes: list of strings
             List of NWIS attributes to include (e.g. 'site_no', 'station_nm', etc.)
@@ -309,16 +319,29 @@ class Nwis:
         -------
         the contents of an NWIS site information file in a dataframe format
         """
+        print('getting site inventory for {}...'.format(data_type))
+        t0 = time.time()
+        if attributes is None:
+            if data_type in {'dv', 'daily_values', 'field_measurements'}:
+                attributes = streamflow_attributes
+            elif data_type in {'gwdv', 'gw_daily_values', 'gwlevels'}:
+                attributes = gw_attributes
         url = self.make_site_url(data_type, attributes)
+        print('url: {}'.format(url))
         sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, attributes[0])
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
 
+        print('reading data with pandas...')
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
+        print("finished in {:.2f}s\n".format(time.time() - t0))
         df['geometry'] = self._compute_geometries(df)
         df.index = df.site_no
+        n_sites = len(df)
         if self.extent is not None:
+            print('culling {} sites to those within extent...'.format(n_sites))
             within = np.array([g.within(self.extent) for g in df.geometry])
-            return df[within].copy()
+            df = df[within].copy()
+        print("finished inventory in {:.2f}s\n".format(time.time() - t0))
         return df
 
     @property
@@ -434,7 +457,6 @@ class Nwis:
                 print(e)
                 continue
             all_dvs[station] = df
-        self.dvs = all_dvs
         if self.write_log_file:
             out_logfile = 'retrieved_{}_dvs_log_{}.csv'.format(parameter_code,
                                                            time.strftime('%Y%m%d%H%M%S'))
@@ -442,18 +464,6 @@ class Nwis:
             print('Log of query saved to {}'.format(out_logfile))
         self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
         return all_dvs
-
-    def q90(self, stations=None, start_date='1880-01-01', end_date=None):
-
-        if len(self.dvs) == 0 and stations is not None:
-            self.get_all_dvs(stations, start_date=start_date, end_date=end_date)
-        Q90 = {}
-        for site_no, dvs in list(self.dvs.items()):
-            DDcd = [c for c in dvs.columns if '00060' in c and 'cd' not in c][0]
-            DDvalues = dvs[DDcd].convert_objects(convert_numeric=True)
-            Q90[site_no] = DDvalues.quantile(0.1)
-        self.dv_q90 = Q90
-        return Q90
 
     def number_of_sites_measured_by_year(self, df):
         """Computes the number of sites measured in each year. The dataframe is grouped by year,
@@ -473,91 +483,6 @@ class Nwis:
         nm = pd.DataFrame(nmeasurements, columns=['year', 'n'])
         nm.index = nm.year
         return nm['n']
-
-    def baseflow_summary(self, field_measurements=None, dvs=None, q90_window=20, output_proj4=None):
-
-        if field_measurements is None:
-            fm = self.field_measurements
-        else:
-            fm = field_measurements
-
-        if dvs is None:
-            dvs = self.dvs
-
-        if fm['measurement_dt'].dtype != 'datetime64[ns]':
-            fm['measurement_dt'] = pd.to_datetime(fm.measurement_dt)
-
-
-        field_sites = self.field_sites.copy()
-
-        # reprojected the output X, Y coordinates
-        print('reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4))
-        if output_proj4 is not None:
-            field_sites['geometry'] = gisutils.project(field_sites, self.proj4, output_proj4)
-
-        fm_site_no = []
-        Qm = []
-        measurement_dt = []
-        measured_rating_diff = []
-        drainage_area = []
-        station_nm = []
-        index_station = []
-        indexQr = []
-        indexQ90 = []
-        X, Y = [], []
-        for i in range(len(fm)):
-            mdt = fm.measurement_dt.tolist()[i]
-            Dt = dt.datetime(mdt.year, mdt.month, mdt.day)
-            for site_no, data in list(dvs.items()):
-
-                # check if index station covers measurement date
-                try:
-                    dv = data.ix[Dt]
-                except KeyError:
-                    continue
-                dv = data.ix[Dt]
-                site_no = dv.site_no
-                DDcd = [k for k in list(data.keys()) if '00060' in k and not 'cd' in k][0]
-                try:
-                    Qr = float(dv[DDcd]) # handle ice and other non numbers
-                except:
-                    continue
-
-                # get q90 values for window
-                q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window, unit='Y')
-                q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window, unit='Y')
-                values = pd.to_numeric(data.ix[q90start:q90end, DDcd], errors='coerce')
-                q90 = values.quantile(q=0.1)
-
-                # append last to avoid mismatches in length
-                site_info = field_sites.ix[fm.site_no.values[i]]
-                fm_site_no.append(fm.site_no.values[i])
-                station_nm.append(site_info['station_nm'])
-                Qm.append(fm.discharge_va.values[i])
-                measurement_dt.append(fm.measurement_dt.tolist()[i])
-                measured_rating_diff.append(fm.measured_rating_diff.values[i])
-                drainage_area.append(site_info['drain_area_va'])
-                index_station.append(site_no)
-                indexQr.append(Qr)
-                indexQ90.append(q90)
-                X.append(site_info['geometry'].xy[0][0])
-                Y.append(site_info['geometry'].xy[1][0])
-
-        df = pd.DataFrame({'site_no': fm_site_no,
-                           'station_nm': station_nm,
-                           'datetime': measurement_dt,
-                           'Qm': Qm,
-                           'quality': measured_rating_diff,
-                           'drn_area': drainage_area,
-                           'idx_station': index_station,
-                           'indexQr': indexQr,
-                           'indexQ90': indexQ90,
-                           'X': X,
-                           'Y': Y})
-        df['est_error'] = [self.est_error.get(q.lower(), self.default_error) for q in df.quality]
-        df = df[['site_no', 'datetime', 'Qm', 'quality', 'est_error',
-                 'idx_station', 'indexQr', 'indexQ90', 'drn_area', 'station_nm', 'X', 'Y']]
-        return df
 
     def write_shp(self, df, shpname='NWIS_export.shp', **kwargs):
         """Write a shapefile of points from NWIS site file

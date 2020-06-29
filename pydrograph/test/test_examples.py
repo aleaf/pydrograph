@@ -8,11 +8,6 @@ from pydrograph import Nwis
 
 @pytest.fixture(scope='session')
 def extent_poly():
-    #extent_shp = 'examples/data/muk_nf.shp' # polygon of study area
-    #epsg = 26915
-
-    #extent_poly = shape(fiona.open(extent_shp).next()['geometry'])
-    #extent_poly_ll = project(extent_poly, "+init=epsg:{}".format(epsg), "+init=epsg:4269")
     extent_poly_ll = box(-92.7, 46.7, -92.6, 46.8)
 
     extent_poly = project(extent_poly_ll, "+init=epsg:{}".format(4269), "+init=epsg:26915")
@@ -28,33 +23,61 @@ def nwis_instance(extent_poly):
     return nwis
 
 
-def test_instantiate_with_polygon_sw(nwis_instance):
+@pytest.fixture(scope='session')
+def field_sites(nwis_instance):
+    field_sites = nwis_instance.get_siteinfo('field_measurements')
+    return field_sites
+
+
+@pytest.fixture(scope='session')
+def gw_field_sites(nwis_instance):
+    field_sites = nwis_instance.get_siteinfo('gwlevels')
+    return field_sites
+
+
+@pytest.fixture(scope='session')
+def dv_sites(nwis_instance):
+    dv_sites = nwis_instance.get_siteinfo('daily_values')
+    return dv_sites
+
+
+@pytest.fixture(scope='session')
+def gw_dv_sites(nwis_instance):
+    dv_sites = nwis_instance.get_siteinfo('gw_daily_values')
+    return dv_sites
+
+
+def test_get_sw_sites(nwis_instance):
     nwis = nwis_instance
-    assert isinstance(nwis.field_sites, pd.DataFrame)
-    assert len(nwis.field_sites) > 0
-    assert isinstance(nwis.dv_sites, pd.DataFrame)
-    assert len(nwis.dv_sites) > 0
+    field_sites = nwis.get_siteinfo('field_measurements')
+    dv_sites = nwis.get_siteinfo('daily_values')
+    assert isinstance(field_sites, pd.DataFrame)
+    assert len(field_sites) > 0
+    assert isinstance(dv_sites, pd.DataFrame)
+    assert len(dv_sites) > 0
 
 
-def test_instantiate_with_polygon_gw(nwis_instance):
+def test_get_gw_sites(nwis_instance):
     nwis = nwis_instance
-    assert isinstance(nwis.gwfield_sites, pd.DataFrame)
-    assert len(nwis.gwfield_sites) > 0
-    assert isinstance(nwis.gwdv_sites, pd.DataFrame)
-    assert len(nwis.gwdv_sites) > 0
+    gwfield_sites = nwis.get_siteinfo('gwlevels')
+    gwdv_sites = nwis.get_siteinfo('gw_daily_values')
+    assert isinstance(gwfield_sites, pd.DataFrame)
+    assert len(gwfield_sites) > 0
+    assert isinstance(gwdv_sites, pd.DataFrame)
+    assert len(gwdv_sites) > 0
 
 
-def test_get_daily_values_sw(nwis_instance):
+def test_get_daily_values_sw(nwis_instance, dv_sites):
     nwis = nwis_instance
-    sites = nwis.dv_sites.site_no.tolist()[0:2]
+    sites = dv_sites.site_no.tolist()[0:2]
     dvs = nwis.get_all_dvs(sites, start_date='1990-01-01')
     assert isinstance(dvs, dict)
     assert isinstance(dvs[4021520], pd.DataFrame)
 
 
-def test_get_daily_values_gw(nwis_instance):
+def test_get_daily_values_gw(nwis_instance, gw_dv_sites):
     nwis = nwis_instance
-    sites = nwis.gwdv_sites.site_no.tolist()[0:2]
+    sites = gw_dv_sites.site_no.tolist()[0:2]
     dvs = nwis.get_all_dvs(sites, 'gwlevels', start_date='1990-01-01')
     assert isinstance(dvs, dict)
     assert isinstance(dvs[464222092403801], pd.DataFrame)
@@ -84,16 +107,16 @@ def test_make_url_gw(nwis_instance):
     assert isinstance(url, str)
 
 
-def test_get_field_measurements(nwis_instance):
+def test_get_field_measurements(nwis_instance, field_sites):
     nwis = nwis_instance
-    sites = nwis.field_sites.site_no.tolist()[:5]
+    sites = field_sites.site_no.tolist()[:5]
     fm = nwis.get_all_measurements(sites)
     assert isinstance(fm, pd.DataFrame)
 
 
-def test_get_gw_field_measurements(nwis_instance):
+def test_get_gw_field_measurements(nwis_instance, gw_field_sites):
     nwis = nwis_instance
-    sites = nwis.gwfield_sites.site_no.tolist()[:5]
+    sites = gw_field_sites.site_no.tolist()[:5]
     fm = nwis.get_all_measurements(sites, txt='gwlevels')
     assert isinstance(fm, pd.DataFrame)
 
