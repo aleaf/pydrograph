@@ -3,7 +3,7 @@ Package for getting and processing stream flow and groundwater level measurement
 
 ### Version 0
 
-[![Build Status](https://travis-ci.com/aleaf/pydrograph.svg?branch=master)](https://travis-ci.org/aleaf/pydrograph.svg)
+[![Build Status](https://travis-ci.com/aleaf/pydrograph.svg?branch=master)](https://travis-ci.com/aleaf/pydrograph.svg)
 [![Build status](https://ci.appveyor.com/api/projects/status/u1mdn7enfel7u39n?svg=true)](https://ci.appveyor.com/project/aleaf/pydrograph)
 [![codecov](https://codecov.io/gh/aleaf/pydrograph/branch/master/graph/badge.svg)](https://codecov.io/gh/aleaf/pydrograph)
 
@@ -17,24 +17,28 @@ Getting Started
 
 ### Get site information for an area defined by a lat/lon bounding box:
 ```python
+import gisutils
 import pydrograph
-from attributes import streamflow_attributes
+from pydrograph.attributes import streamflow_attributes
 
 ll_bbox = [-91.497, 46.748, -90.228, 46.156] # nw lon, nw lat, se lon, se lat
 
 nwis = pydrograph.Nwis(ll_bbox)
 
 # Generate a url to get field measurements for the bounding box
-url = nwis.make_measurements_url('field_measurements', streamflow_attributes)
+url = nwis.make_site_url('field_measurements', streamflow_attributes)
 
 # Get a dataframe of site information for the bounding box (url is generated internally)
-fm_siteinfo = nwis.get_siteinfo('field_measurements', streamflow_attributes)
+field_sites = nwis.get_siteinfo('field_measurements')
 
 # Write the site information out to a shapefile
-nwis.write_shp(fm_siteinfo, 'shps/NWIS_field_measurements.shp')
+gisutils.df2shp(field_sites, 'NWIS_field_measurements.shp')
 
-# Get site information for daily values
-dv_siteinfo = nwis.get_siteinfo('dv', streamflow_attributes)
+# Get inventory of daily values sites
+dv_sites = nwis.get_siteinfo('daily_values')
+
+# Get daily values for a single site
+df = nwis.get_dvs(4015475)
 ```
 ### Bugs
 
@@ -54,7 +58,7 @@ pandas
 fiona   
 shapely  
 pyproj  
-gisutils
+gisutils  (available from pip or atleaf conda channel)
 
 ### Install python and dependency packages
 Download and install the [Anaconda python distribution](https://www.anaconda.com/distribution/).

@@ -1,3 +1,4 @@
+import os
 import pydrograph
 from ..attributes import streamflow_attributes
 
@@ -18,3 +19,24 @@ def test_get_info_from_bounding_box(tmpdir):
 
     # Get site information for daily values
     dv_siteinfo = nwis.get_siteinfo('dv', streamflow_attributes)
+
+
+def test_readme(tmpdir):
+
+    # copy the python snippet in readme to a .py file in test output folder
+    dest_py_file = os.path.join(tmpdir, 'test_readme.py')
+    with open('README.md') as src:
+        with open(dest_py_file, 'w') as dest:
+            for line in src:
+                if "```python" in line:
+                    for line in src:
+                        if "```" in line:
+                            break
+                        dest.write(line)
+
+    # execute the .py file
+    wd = os.getcwd()
+    os.chdir(tmpdir)
+    ival = os.system('python test_readme.py')
+    assert ival == 0, 'could not run python code in README.md'
+    os.chdir(wd)

@@ -1,4 +1,4 @@
-name: test
+name: pydrograph
 channels:
 - conda-forge
 - defaults
