@@ -15,7 +15,7 @@ coord_datums_epsg = {'NAD83': 4269,
                      'NAD27': 4267}
 
 coord_datums_proj_str = {'NAD83': '+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs',
-                     'NAD27': '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs'}
+                         'NAD27': '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs'}
 
 
 def WI_statewide_eqn(Qm, A, Qr, Q90):

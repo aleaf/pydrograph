@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import fiona
 from shapely.geometry import shape, box
@@ -20,6 +21,18 @@ def extent_poly():
 @pytest.fixture(scope='session')
 def nwis_instance(extent_poly):
     nwis = Nwis(extent=extent_poly)
+    return nwis
+
+
+def test_nwis_from_shapefile(nwis_instance, extent_poly):
+    """Check that supplying a shapefile directly in a different CRS
+    results in the same extent as supplying a shapely polygon
+    in the same CRS."""
+    nwis = Nwis(extent='examples/data/bbox.shp')
+    area_of_overlap = nwis.extent.intersection(nwis_instance.extent).area
+    assert np.allclose(area_of_overlap, nwis_instance.extent.area)
+    assert np.allclose(area_of_overlap, nwis.extent.area)
+    assert np.allclose(area_of_overlap, extent_poly.area)
     return nwis
 
 
