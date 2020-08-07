@@ -12,7 +12,6 @@ dependencies:
 - pandas
 - fiona
 - shapely
-- rtree
 - pyproj>=2.0
 - codecov
 - coverage
