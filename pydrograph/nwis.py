@@ -332,7 +332,8 @@ class Nwis:
         skiprows = self.get_header_length(sitefile_text, attributes[0])
 
         print('reading data with pandas...')
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes)
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes,
+                         dtype={'site_no': object})
         print("finished in {:.2f}s\n".format(time.time() - t0))
         df['geometry'] = self._compute_geometries(df)
         df.index = df.site_no
@@ -379,7 +380,8 @@ class Nwis:
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
+                         dtype={'site_no': object})
         if len(df) > 0:
             df.index = pd.to_datetime(df.datetime)
             loginfo.append(True)
@@ -406,7 +408,8 @@ class Nwis:
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols)
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
+                         dtype={'site_no': object})
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
             loginfo.append(True)
