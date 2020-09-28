@@ -6,7 +6,6 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 from shapely.geometry import Point, Polygon, shape
-import pyproj
 import gisutils
 from .attributes import streamflow_attributes, gw_attributes
 

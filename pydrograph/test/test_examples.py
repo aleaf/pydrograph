@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
-import fiona
-from shapely.geometry import shape, box
+from shapely.geometry import box
 import pytest
 from gisutils import project, df2shp
 from pydrograph import Nwis
