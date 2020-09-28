@@ -209,7 +209,7 @@ Versioneer-0.16 and earlier only looked for a `.git` directory next to the
 
 `setup.py develop` and `pip install --editable .` allow you to install a
 project into a virtualenv once, then continue editing the source code (and
-test) without re-installing after every change.
+tests) without re-installing after every change.
 
 "Entry-point scripts" (`setup(entry_points={"console_scripts": ..})`) are a
 convenient way to specify executable scripts that should be installed along

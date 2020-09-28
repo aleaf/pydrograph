@@ -89,7 +89,7 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
     return upstream_area
 
 
-def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
+def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
     """Baseflow separation using the Institute of Hydrology method, as documented in
     Institute of Hydrology, 1980b, Low flow studies report no. 3--Research report: 
     Wallingford, Oxon, United Kingdom, Institute of Hydrology Report no. 3, p. 12-19,
@@ -117,6 +117,14 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
         as documented in Wahl and Wahl (1988), is used in the Base-Flow Index (BFI)
         fortran program. This method reassigns zero values to -2 in log space (0.01)
         for the interpolation.
+    freq : str or DateOffset, default ‘D’
+        Any `pandas frequency alias <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
+        Regular time interval that forms the basis for base-flow separation. Input data are
+        resampled to this frequency, and block lengths represent N repetitions
+        of the time increment. By default, days ('D'), which is what all previous BFI methods
+        are based on. Note that this is therefore an experimental option; it is up to the user t
+        o verify any results produced by other frequencies.
+
     
     Returns
     -------
@@ -144,7 +152,7 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
 
     # convert the series to a dataframe; resample to daily values
     # missing days will be filled with nan values
-    df = pd.DataFrame(Qseries).resample('D').mean()
+    df = pd.DataFrame(Qseries).resample(freq).mean()
     df.columns = ['Q']
 
     # compute block numbers for grouping values on blocks
@@ -178,7 +186,7 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True):
     Q.index = Q.datetime
 
     # expand Q dataframe back out to include row for each day
-    Q = Q.dropna(subset=['datetime'], axis=0).resample('D').mean()
+    Q = Q.dropna(subset=['datetime'], axis=0).resample(freq).mean()
 
     # interpolate between baseflow ordinates
     if interp_semilog:

@@ -23,7 +23,7 @@ def test_get_info_from_bounding_box(tmpdir):
 
 def test_readme(tmpdir):
 
-    # copy the python snippet in readme to a .py file in test output folder
+    # copy the python snippet in readme to a .py file in tests output folder
     dest_py_file = os.path.join(tmpdir, 'test_readme.py')
     with open('README.md') as src:
         with open(dest_py_file, 'w') as dest:

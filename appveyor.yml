@@ -39,9 +39,9 @@ install:
   - conda list
 
 test_script:
-  - conda activate test
+  - conda activate tests
   - pip install -e .
-  - python -m ipykernel install --user --name test --display-name "test"
+  - python -m ipykernel install --user --name tests --display-name "tests"
   - pytest -v
 
 after_test:

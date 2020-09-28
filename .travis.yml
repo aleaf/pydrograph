@@ -31,8 +31,8 @@ install:
   #- pip install -r requirements-dev.txt
 
 script:
-  - coverage run -m pytest -v  # Run the tests and check for test coverage.
-  - coverage report -m  # Generate test coverage report.
+  - coverage run -m pytest -v  # Run the tests and check for tests coverage.
+  - coverage report -m  # Generate tests coverage report.
 
 after_success:
   - codecov  # Upload the report to codecov.
