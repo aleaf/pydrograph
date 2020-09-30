@@ -120,8 +120,8 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
     freq : str or DateOffset, default ‘D’
         Any `pandas frequency alias <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
         Regular time interval that forms the basis for base-flow separation. Input data are
-        resampled to this frequency, and block lengths represent N repetitions
-        of the time increment. By default, days ('D'), which is what all previous BFI methods
+        resampled to this frequency, and block lengths represent the number of time increments
+        of the frequency. By default, days ('D'), which is what all previous BFI methods
         are based on. Note that this is therefore an experimental option; it is up to the user t
         o verify any results produced by other frequencies.
 
@@ -144,6 +144,11 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
     will differ from those produced by the BFI program.
     
     """
+    if len(Qseries) < 2 * block_length:
+        raise ValueError('Input Series must be at '
+                         'least two block lengths\nblock_length: '
+                         '{}\n{}'.format(block_length, Qseries))
+
     # convert flow values to numeric if they are objects
     # (pandas will cast column as objects if there are strings such as "ICE")
     # coerce any strings into np.nan values

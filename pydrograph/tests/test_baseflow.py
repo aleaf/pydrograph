@@ -20,3 +20,23 @@ def test_IHmethod(test_data, block_length, interp_semilog, freq):
                        interp_semilog=interp_semilog)
     minimum_points = ~results.block_Qmin.isna()
     assert np.all(results.loc[minimum_points, 'block_Qmin'] <= results.loc[minimum_points, 'Q'])
+
+
+@pytest.mark.parametrize('data', (pytest.param(pd.Series(),
+                                               marks=pytest.mark.xfail(reason="index isn't datetime")),
+                                  pytest.param(pd.Series(index=pd.to_datetime([])),
+                                               marks=pytest.mark.xfail(reason="index isn't datetime")),
+                                  pytest.param(pd.Series([15.2, 14.8, 14.5, 14.2],
+                                                         index=pd.date_range('2020-09-30', '2020-10-03')),
+                                               marks=pytest.mark.xfail(reason="index isn't datetime")),
+                                  pd.Series([15.2, 14.8, 14.5, 14.2, 13.9, 13.8, 13.8, 13.8, 13.8, 13.8],
+                                            index=pd.date_range('2020-01-01', '2020-01-10'))
+                                  )
+                         )
+def test_IHmethod_with_not_enough_data(data):
+    results = IHmethod(data)
+    j=2
+
+
+
+
