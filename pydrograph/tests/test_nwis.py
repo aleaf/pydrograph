@@ -4,6 +4,7 @@ from shapely.geometry import shape, box
 import pytest
 from gisutils import project, df2shp
 from pydrograph import Nwis
+import numpy as np
 from pandas._testing import assert_frame_equal
 
 
@@ -34,4 +35,6 @@ def test_instantaneous_value(nwis_instance):
     #make sure all inputs are available for this function
     #check that it creates a dataframe (use assert and exists)
     df = nwis_instance.get_iv_siteinfo(attributes = 'iv_attributes')
-    assert_frame_equal(df, df)
+    assert len(df) > 0
+    assert 'site_no' in df.columns
+    assert df.site_no.dtype == np.object
