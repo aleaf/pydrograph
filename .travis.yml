@@ -8,7 +8,7 @@ language: python
 
 matrix:
   include:
-    - env: ENV_FILE="ci/requirements.yml"
+    - env: ENV_FILE="ci/latest-python.yml"
 
 install:
   - sudo apt-get update
