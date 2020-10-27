@@ -3,13 +3,11 @@ ipython
 jupyter
 notebook
 ipykernel
+matplotlib
 numpy
 pandas
 fiona
 shapely
 pyproj>=2.0
-pytest
-ipython
-matplotlib
 pip
 gis-utils

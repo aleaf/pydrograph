@@ -9,6 +9,7 @@ dependencies:
 - notebook
 - ipykernel
 - numpy
+- scipy
 - pandas
 - fiona
 - shapely

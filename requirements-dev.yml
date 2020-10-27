@@ -1,4 +1,4 @@
-name: test
+name: pydrograph_dev
 channels:
 - conda-forge
 - defaults
@@ -13,17 +13,20 @@ dependencies:
 - pandas
 - fiona
 - shapely
-- pyproj>=2.2
+- pyproj>=2.0
+- pytest
 - codecov
 - coverage
 - flake8
-- pytest
 - sphinx
-- matplotlib
 - numpydoc
+- nbsphinx  # for rendering notebooks in sphinx-generated docs
 - sphinx-copybutton
 - sphinx_rtd_theme
+- twine  # for uploading releases to PyPI
 - pip
 - pip:
   - gis-utils
+  - doctr  # for publishing docs via Travis
+  - versioneer  # semantic versioning
 
