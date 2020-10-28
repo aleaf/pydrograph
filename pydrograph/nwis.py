@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import Point, Polygon, shape
 import gisutils
-from .attributes import streamflow_attributes, gw_attributes
+from .attributes import streamflow_attributes, gw_attributes, iv_attributes
 
 
 coord_datums_epsg = {'NAD83': 4269,
@@ -39,6 +39,7 @@ class Nwis:
     default_error = 0.50
 
     urlbase = 'http://nwis.waterdata.usgs.gov/usa/nwis/'
+    urlbase_iv = 'http://waterservices.usgs.gov/nwis/site/?format=rdb&bBox='
     dtypes_dict = {'dv': 'dv?referred_module=sw&site_tp_cd=ST&',
                    'daily_values': 'dv?referred_module=sw&site_tp_cd=ST&',
                    'field_measurements': 'measurements?',
@@ -212,6 +213,32 @@ class Nwis:
         url += self.stuff_at_end
         #print '{}'.format(url)
         return url
+        
+    def make_iv_site_url(self):
+        """ This function makes a url to pull instantaneous values from the nwis webservice. lat/lon box must be defined earlier using a llbox initialization of the nwis class.
+                
+        Parameters
+        ----------
+        data_type: str
+
+        Returns
+        -------
+        url string
+        """
+        
+        self.bbox_url = '{:.3f},'.format(self.bounds_latlon[0]) +\
+                '{:.3f},'.format(self.bounds_latlon[1]) +\
+                '{:.3f},'.format(self.bounds_latlon[2]) +\
+                '{:.3f}'.format(self.bounds_latlon[3])
+
+        self.stuff_at_end = '&outputDataTypeCd=iv,id&siteStatus=all&hasDataTypeCd=iv'
+
+        url = self.urlbase_iv
+        url += self.bbox_url
+
+        url += self.stuff_at_end
+        #print '{}'.format(url)
+        return url
 
     def make_dv_url(self, station_IDs, parameter_code='00060', start_date='1880-01-01', end_date=None):
         """Creates url to retrieve daily values for a site
@@ -226,7 +253,7 @@ class Nwis:
             e.g. 00060 for discharge.
             See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
 
-        start_date: (string) 'YYYY-DD-MM'
+        start_date: (string) 'YYYY-MM-DD'
             To obtain the entire period-of-record use a start date of 1880-01-01 (default)...
 
         Notes
@@ -251,6 +278,55 @@ class Nwis:
         station_IDs = ','.join([Nwis.correct_stationID(s) for s in station_IDs])
 
         url = 'http://waterservices.usgs.gov/nwis/dv/?format=rdb'
+
+        url += '&sites={}'.format(station_IDs)
+        url += '&startDT={}'.format(start_date)
+        if end_date is not None:
+            url += '&endDT={}'.format(end_date)
+        url += '&parameterCd={}'.format(parameter_code)
+        print('{}'.format(url))
+        return url
+        
+    def make_iv_url(self, station_IDs, parameter_code='00060', start_date='2000-01-01', end_date= '2000-12-31'):
+        """Creates url to retrieve instantaneous values for a site given a list of station IDs.
+
+
+        Parameters
+        ----------
+        stationIDs: int, str or list of ints or strings
+            USGS station IDs
+
+        parameter_code: (string)
+            e.g. 00060 for discharge.
+            See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
+
+        start_date: (string) 'YYYY-MM-DD'
+            default start and end dates are written to pull the year 2000, not the entire history of data,
+            as these are instantaneous values, so there is a datapoint every ~15 minutes. pull smaller chunks of data
+            to ensure that the url and code will run.
+
+        Notes
+        -----
+        A leading zero is added to the site number if the first digit is greater than 1
+        (this can happend for basins 01 - 09 if the site number gets converted to an int).
+        Note that this may cause site numbers for basin 01 (North Atlantic slope) to get confused with
+        basins 10-16 (west coast and hawaii).
+        See <http://help.waterdata.usgs.gov/faq/sites/do-station-numbers-have-any-particular-meaning>
+
+        """
+        #need to code in a more systematic way of choosing dates, but for now, pulling a whole year is more than enough
+        if not isinstance(station_IDs, list):
+            station_IDs = [str(station_IDs)]
+
+        def add_leading_zero(station_ID):
+            if 1 < int(str(station_ID)[0]) < 10:
+                station_ID = '0{}'.format(station_IDs)
+            return station_ID
+
+        #station_IDs = ','.join(['0{}'.format(int(str(s))) for s in station_IDs])
+        station_IDs = ','.join([Nwis.correct_stationID(s) for s in station_IDs])
+
+        url = 'http://waterservices.usgs.gov/nwis/iv/?format=rdb'
 
         url += '&sites={}'.format(station_IDs)
         url += '&startDT={}'.format(start_date)
@@ -363,7 +439,7 @@ class Nwis:
         parameter_code: string, default is 00060 for discharge.
             See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
 
-        start_date: (string) 'YYYY-DD-MM'
+        start_date: (string) 'YYYY-MM-DD'
             To obtain the entire period-of-record use a start date of 1880-01-01 (default)...
 
         Returns
@@ -388,6 +464,100 @@ class Nwis:
             loginfo.append(False)
         self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
         return df
+        
+    def get_iv_siteinfo(self, attributes = 'iv_attributes'):
+        """Retrieves site information for the bounding box supplied to the NWIS class instance.
+
+        Parameters
+        ----------
+
+        attributes: preset, 'iv_attributes'
+
+        Returns
+        -------
+        the contents of an NWIS site information file in a dataframe format
+        """
+        #print('getting site inventory for {}...'.format(data_type))
+        t0 = time.time()
+        attributes = iv_attributes
+        url = self.make_iv_site_url()
+        print('url: {}'.format(url))
+        sitefile_text = urlopen(url).readlines()
+        skiprows = self.get_header_length(sitefile_text, attributes[0])
+
+        print('reading data with pandas...')
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=attributes, dtype={'site_no': object})
+        print("finished in {:.2f}s\n".format(time.time() - t0))
+        df['geometry'] = self._compute_geometries(df)
+        df.index = df.site_no
+        n_sites = len(df)
+        if self.extent is not None:
+            print('culling {} sites to those within extent...'.format(n_sites))
+            within = np.array([g.within(self.extent) for g in df.geometry])
+            df = df[within].copy()
+        print("finished inventory in {:.2f}s\n".format(time.time() - t0))
+        return df          
+
+    
+    def get_ivs(self, station_ID, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31',
+        sample_period = 'D', agg_method = 'mean'):
+        """Retrieves daily values for a site.
+
+        Parameters
+        ----------
+        stationID: (string)
+            USGS station ID
+
+        parameter_code: string, default is 00060 for discharge.
+            See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
+
+        start_date: (string) 'YYYY-MM-DD'
+            To obtain the entire period-of-record use a start date of 2000-01-01 (default)...
+        end_date: (string) 'YYYY-MM-DD'
+            preset to take the year 2000, don't set the range too long (longer than a year or so) or the code will be very slow and may not finish running
+        sample_period: (string), default 'D' for daily
+            change this string to how you would like the instantaneous values aggregated. this can be daily, weekly, monthly, etc.
+            None will give just the raw data which is generally in 15 minute increments
+        agg_method: (string), default 'mean'
+            change this to chose how the aggregated instantaneous values are calculated. options include 'mean', 'median', 'max', etc.
+
+        Returns
+        -------
+        df: a datetime-index dataframe of daily discharge, with datagaps filled with NaNs, aggregated daily or however specified with 'sample_period'
+        """
+        if parameter_code in list(self.parameter_codes.keys()):
+            parameter_code = self.parameter_codes[parameter_code]
+
+        url = self.make_iv_url(station_ID, parameter_code=parameter_code,
+                               start_date=start_date, end_date=end_date)
+        sitefile_text = urlopen(url).readlines()
+        skiprows = self.get_header_length(sitefile_text, 'agency_cd')
+        cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
+        loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols, dtype={'site_no': object})
+
+        if len(df) > 2:
+
+            if len(df) > 0:
+                df.index = pd.to_datetime(df.datetime)
+                loginfo.append(True)
+            else:
+                loginfo.append(False)
+            self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+        
+            if sample_period is not None:
+                df = df.resample(sample_period).agg(agg_method)
+                df = df.rename(columns = {df.columns[0]: 'discharge (cfs)'})
+            else:
+                df = df.rename(columns = {df.columns[4]: 'discharge (cfs)', df.columns[5]: 'code'})
+
+        else:
+            print('No data at this site during this timeframe.')
+
+        if len(df) > 2:
+            return df
+        else:
+            return None
 
     def get_measurements(self, station_ID, txt='measurement'):
         """Retrieves field measurements for a site.
@@ -466,6 +636,26 @@ class Nwis:
             print('Log of query saved to {}'.format(out_logfile))
         self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
         return all_dvs
+
+    def get_all_ivs(self, stations, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31'):
+        ''' This function gets all instantaneous values for a list of station IDs, and places them in a dictionary of dataframes
+        '''
+        
+        all_ivs = {}
+        for station in stations:
+            try:
+                df = self.get_ivs(station, parameter_code=parameter_code, start_date=start_date, end_date=end_date)
+            except Exception as e:
+                print(e)
+                continue
+            all_ivs[station] = df
+        if self.write_log_file:
+            out_logfile = 'retrieved_{}_ivs_log_{}.csv'.format(parameter_code,
+                                                           time.strftime('%Y%m%d%H%M%S'))
+            self.log.to_csv(out_logfile, index=False)
+            print('Log of query saved to {}'.format(out_logfile))
+        self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
+        return all_ivs
 
     def number_of_sites_measured_by_year(self, df):
         """Computes the number of sites measured in each year. The dataframe is grouped by year,

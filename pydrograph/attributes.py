@@ -96,6 +96,32 @@ streamflow_attributes = [ \
 'sv_end_date',     
 'sv_count_nu']
 
+iv_attributes = [ \
+'agency_cd',    
+'site_no',  
+'station_nm',   
+'site_tp_cd',   
+'dec_lat_va',   
+'dec_long_va',  
+'coord_acy_cd', 
+'dec_coord_datum_cd',   
+'alt_va',   
+'alt_acy_va',   
+'alt_datum_cd', 
+'huc_cd',   
+'data_type_cd', 
+'parm_cd',  
+'stat_cd',   
+'ts_id',    
+'loc_web_ds',   
+'medium_grp_cd',    
+'parm_grp_cd',  
+'srs_id',   
+'access_cd',    
+'begin_date',   
+'end_date', 
+'count_nu']
+
 gw_attributes = [
 'site_no',
 'station_nm',
