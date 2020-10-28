@@ -535,20 +535,29 @@ class Nwis:
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols, dtype={'site_no': object})
-        if len(df) > 0:
-            df.index = pd.to_datetime(df.datetime)
-            loginfo.append(True)
-        else:
-            loginfo.append(False)
-        self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+
+        if len(df) > 2:
+
+            if len(df) > 0:
+                df.index = pd.to_datetime(df.datetime)
+                loginfo.append(True)
+            else:
+                loginfo.append(False)
+            self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
         
-        if sample_period is not None:
-            df = df.resample(sample_period).agg(agg_method)
-            df = df.rename(columns = {df.columns[1]: 'discharge (cfs)'})    
+            if sample_period is not None:
+                df = df.resample(sample_period).agg(agg_method)
+                df = df.rename(columns = {df.columns[0]: 'discharge (cfs)'})
+            else:
+                df = df.rename(columns = {df.columns[4]: 'discharge (cfs)', df.columns[5]: 'code'})
+
         else:
-            df = df.rename(columns = {df.columns[4]: 'discharge (cfs)', df.columns[5]: 'code'})
-        
-        return df
+            print('No data at this site during this timeframe.')
+
+        if len(df) > 2:
+            return df
+        else:
+            return None
 
     def get_measurements(self, station_ID, txt='measurement'):
         """Retrieves field measurements for a site.
