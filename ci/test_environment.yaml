@@ -1,4 +1,4 @@
-name: test
+name: pydrograph_ci
 channels:
 - conda-forge
 - defaults
@@ -26,4 +26,3 @@ dependencies:
 - pip
 - pip:
   - gis-utils
-

@@ -3,8 +3,7 @@ Package for getting and processing stream flow and groundwater level measurement
 
 ### Version 0
 
-[![Build Status](https://travis-ci.com/aleaf/pydrograph.svg?branch=master)](https://travis-ci.com/aleaf/pydrograph.svg)
-[![Build status](https://ci.appveyor.com/api/projects/status/u1mdn7enfel7u39n?svg=true)](https://ci.appveyor.com/project/aleaf/pydrograph)
+![Tests](https://github.com/aleaf/pydrograph/workflows/Tests/badge.svg)
 [![codecov](https://codecov.io/gh/aleaf/pydrograph/branch/master/graph/badge.svg)](https://codecov.io/gh/aleaf/pydrograph)
 
 Getting Started
@@ -50,7 +49,7 @@ Installation
 
 **Python versions:**
 
-pydrograph requires **Python** 3.7 (or higher)
+pydrograph requires **Python** 3.8   (or higher)
 
 **Dependencies:**  
 numpy   
