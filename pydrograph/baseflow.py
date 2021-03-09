@@ -89,7 +89,7 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
     return upstream_area
 
 
-def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
+def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D', limit=100):
     """Baseflow separation using the Institute of Hydrology method, as documented in
     Institute of Hydrology, 1980b, Low flow studies report no. 3--Research report: 
     Wallingford, Oxon, United Kingdom, Institute of Hydrology Report no. 3, p. 12-19,
@@ -124,6 +124,9 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
         of the frequency. By default, days ('D'), which is what all previous BFI methods
         are based on. Note that this is therefore an experimental option; it is up to the user t
         o verify any results produced by other frequencies.
+    limit : int
+        Maximum number of timesteps allowed during linear interploation between baseflow 
+        ordinances. Must be greater than zero.
 
     
     Returns
@@ -198,9 +201,9 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
         iszero = Q.ordinate.values == 0
         logQ = np.log10(Q.ordinate)
         logQ[iszero] = -2
-        QB = np.power(10.0, logQ.interpolate(limit=100).values)
+        QB = np.power(10.0, logQ.interpolate(limit=limit).values)
     else:
-        QB = Q.ordinate.interpolate(limit=100).values
+        QB = Q.ordinate.interpolate(limit=limit).values
     Q['QB'] = QB
 
     # reassign the original flow values back to Q
