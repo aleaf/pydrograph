@@ -173,10 +173,14 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D'):
 
     # compute the minimum for each block
     # create dataframe Q, which only has minimums for each block
-    Q = df.groupby('n').min()
+    blocks = df[['Q', 'n']].reset_index(drop=True).dropna(axis=0).groupby('n')
+    Q = blocks.min()
     Q = Q.rename(columns={'Q': 'block_Qmin'})
     Q['n'] = Q.index
-    Q['datetime'] = df[['Q', 'n']].groupby('n').idxmin()  # include dates of minimum values
+    # get the index position of the minimum Q within each block
+    idx_Qmins = blocks.idxmin()['Q'].values.astype(int)
+    # get the date associated with each Q minimum
+    Q['datetime'] = df.index[idx_Qmins]
 
     # compute baseflow ordinates
     Q['ordinate'] = [np.nan] * len(Q)
