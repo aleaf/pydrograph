@@ -10,7 +10,7 @@ from pydrograph import Nwis
 def extent_poly():
     extent_poly_ll = box(-92.7, 46.7, -92.6, 46.8)
 
-    extent_poly = project(extent_poly_ll, "+init=epsg:{}".format(4269), "+init=epsg:26915")
+    extent_poly = project(extent_poly_ll, 4269, "+init=epsg:26915")
     df = pd.DataFrame({'geometry': [extent_poly],
                        'id': [0]})
     df2shp(df, 'examples/data/bbox.shp', epsg=26915)
@@ -20,6 +20,8 @@ def extent_poly():
 @pytest.fixture(scope='session')
 def nwis_instance(extent_poly):
     nwis = Nwis(extent=extent_poly)
+
+    assert nwis.extent.bounds == (-92.7, 46.7, -92.6, 46.8)
     return nwis
 
 

@@ -1,6 +1,5 @@
-__author__ = 'aleaf'
-
 import datetime as dt
+from pathlib import Path
 import time
 from urllib.request import urlopen
 import numpy as np
@@ -12,9 +11,6 @@ from .attributes import streamflow_attributes, gw_attributes, iv_attributes
 
 coord_datums_epsg = {'NAD83': 4269,
                      'NAD27': 4267}
-
-coord_datums_proj_str = {'NAD83': '+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs',
-                         'NAD27': '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs'}
 
 
 def WI_statewide_eqn(Qm, A, Qr, Q90):
@@ -93,7 +89,7 @@ class Nwis:
 
         self.bounds_latlon = bounds_latlon
         self.datum = datum
-        self.proj_str = coord_datums_proj_str[self.datum]
+        self.crs = gisutils.get_authority_crs(coord_datums_epsg[self.datum])
         self.log = pd.DataFrame(columns=self.log_cols)
         self._extent = None
         self.extent = extent
@@ -109,7 +105,7 @@ class Nwis:
     @extent.setter
     def extent(self, extent=None):
         if extent is not None:
-            if isinstance(extent, str):
+            if isinstance(extent, str) or isinstance(extent, Path):
                 # _read_extent_shapefile should automatically reproject to 4269
                 self._extent = self._read_extent_shapefile(extent)
             elif isinstance(extent, Polygon):
@@ -133,15 +129,15 @@ class Nwis:
 
     def _compute_geometries(self, df):
 
-        datum = np.array([coord_datums_epsg[d] for d in df.dec_coord_datum_cd])
-        datums = set(datum)
+        datum = np.array([int(coord_datums_epsg[d]) for d in df.dec_coord_datum_cd])
+        datums = np.unique(datum)
         x1, y1 = df.dec_long_va.values, df.dec_lat_va.values
         x2 = np.ones(len(df), dtype=float) * np.nan
         y2 = np.ones(len(df), dtype=float) * np.nan
         for dtm in datums:
-            pr1 = "epsg:{}".format(dtm)
+            pr1 = gisutils.get_authority_crs(int(dtm))
             loc = datum == dtm
-            x2[loc], y2[loc] = gisutils.project((x1[loc], y1[loc]), pr1, self.proj_str)
+            x2[loc], y2[loc] = gisutils.project((x1[loc], y1[loc]), pr1, self.crs)
         geoms = [Point(x, y) for x, y in zip(x2, y2)]
         return geoms
 
@@ -159,12 +155,12 @@ class Nwis:
         from fiona.crs import to_string, from_epsg
 
         print('reading extent from {}...'.format(shpfile))
-        shp = fiona.open(shpfile)
-        g = shape(shp.next()['geometry'])
-
-        if to_string(from_epsg(coord_datums_epsg[self.datum])) != to_string(shp.crs):
-            print('reprojecting extent from {} to {}'.format(to_string(shp.crs), self.proj_str))
-            return gisutils.project(g, to_string(shp.crs), self.proj_str)
+        with fiona.open(shpfile) as src:
+            g = shape(next(iter(src))['geometry'])
+        shpfile_crs = gisutils.get_shapefile_crs(shpfile)
+        if self.crs != shpfile_crs:
+            print(f'reprojecting extent from\n{shpfile_crs}\nto\n{self.crs}')
+            return gisutils.project(g, shpfile_crs, self.crs)
         else:
             return g
 

@@ -1,11 +1,8 @@
-import pandas as pd
-import fiona
-from shapely.geometry import shape, box
+from shapely.geometry import box, Polygon
 import pytest
-from gisutils import project, df2shp
+from gisutils import project
 from pydrograph import Nwis
 import numpy as np
-from pandas._testing import assert_frame_equal
 
 @pytest.fixture(scope='session')
 def extent_poly():
@@ -29,6 +26,15 @@ def stations(nwis_instance):
     stations = stations.site_no.unique()
     #stations = stations.to_list()
     return stations
+
+@pytest.mark.parametrize('shapefile', (
+    # esri? shapefile that failed with old-style fiona CRS handling
+    ('cacheeastcr_chd_perimeter_bufferinside50m.shp'),
+    ))
+def test_extent_shapefile(test_data_path, shapefile):
+    shapefile = test_data_path / shapefile
+    nwis_instance = Nwis(extent=shapefile)
+    assert isinstance(nwis_instance.extent, Polygon)
 
 def test_compute_geometries(extent_poly, nwis_instance, field_sites):
     geoms = nwis_instance._compute_geometries(field_sites)
