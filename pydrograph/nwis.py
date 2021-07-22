@@ -4,7 +4,7 @@ import time
 from urllib.request import urlopen
 import numpy as np
 import pandas as pd
-from shapely.geometry import Point, Polygon, shape
+from shapely.geometry import Point, Polygon, shape, box
 import gisutils
 from .attributes import streamflow_attributes, gw_attributes, iv_attributes
 
@@ -111,8 +111,11 @@ class Nwis:
             elif isinstance(extent, Polygon):
                 self._extent = extent
             else:
-                print('Warning: extent argument of unknown datatype!')
-                self._extent = None
+                try:
+                    self._extent = box(*extent)
+                except:
+                    print('Warning: extent argument of unknown datatype!')
+                    self._extent = None
         else:
             self._extent = None
 
@@ -400,6 +403,10 @@ class Nwis:
         url = self.make_site_url(data_type, attributes)
         print('url: {}'.format(url))
         sitefile_text = urlopen(url).readlines()
+        if 'DOCTYPE html' in sitefile_text[0].decode():
+            print(f"No sites found for {self.bounds_latlon}!")
+            return None
+            
         skiprows = self.get_header_length(sitefile_text, attributes[0])
 
         print('reading data with pandas...')

@@ -48,6 +48,15 @@ def test_instantaneous_value(nwis_instance):
     assert 'site_no' in df.columns
     assert df.site_no.dtype == np.object
 
+def test_tuple_extent_no_data():
+
+    bbox = (-91.45793026894977, 47.2, 
+            -90.20509548401013, 47.3)
+    nwis = Nwis(extent=bbox)
+    assert np.allclose(bbox, nwis.extent.bounds)
+    gwdv_sites = nwis.get_siteinfo('gwdv')
+    assert gwdv_sites is None
+    
 def test_get_all_ivs(nwis_instance, stations):
     all_sites = nwis_instance.get_all_ivs(stations)
     site_one = list(all_sites.values())[0]
