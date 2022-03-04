@@ -465,7 +465,8 @@ class Nwis:
             loginfo.append(True)
         else:
             loginfo.append(False)
-        self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+        self.log = pd.concat([self.log,
+                              pd.DataFrame([loginfo], columns=self.log_cols)])
         return df
         
     def get_iv_siteinfo(self, attributes = 'iv_attributes'):
@@ -546,7 +547,8 @@ class Nwis:
                 loginfo.append(True)
             else:
                 loginfo.append(False)
-            self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+            self.log = pd.concat([self.log,
+                                  pd.DataFrame([loginfo], columns=self.log_cols)])
         
             if sample_period is not None:
                 df = df.resample(sample_period).agg(agg_method)
@@ -587,7 +589,8 @@ class Nwis:
             loginfo.append(True)
         else:
             loginfo.append(False)
-        self.log = self.log.append(pd.DataFrame([loginfo], columns=self.log_cols))
+        self.log = pd.concat([self.log,
+                              pd.DataFrame([loginfo], columns=self.log_cols)])
         return df
 
     def get_all_measurements(self, site_numbers, txt='measurements'):
@@ -615,7 +618,7 @@ class Nwis:
             df.index = pd.MultiIndex.from_product([[df.site_no.values[0]], df.index.values],
                                               names=['site_no', 'datetime'])
             df['measurement_dt'] = pd.to_datetime(df[self._get_date_col(df)])
-            all_measurements = all_measurements.append(df)
+            all_measurements = pd.concat([all_measurements, df])
         if self.write_log_file:
             out_logfile = 'retrieved_{}_log_{}.csv'.format(txt, time.strftime('%Y%m%d%H%M%S'))
             self.log.to_csv(out_logfile, index=False)
