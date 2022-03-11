@@ -12,6 +12,7 @@ dependencies:
 - numpy
 - scipy
 - pandas
+- xmltodict
 - fiona
 - shapely
 - pyproj>=2.0
