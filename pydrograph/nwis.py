@@ -45,7 +45,9 @@ class Nwis:
                    'inventory': 'inventory?'}
 
     parameter_codes = {'discharge': '00060',
-                       'gwlevels': '72019'}
+                       'gwlevels': '72019',
+                       'gageheight': '00065 ',
+                       'gwelev':'62611'}
 
     coordinate_format = 'decimal_degrees' #coordinate_format=decimal_degrees&
     group_key = 'NONE' #group_key=NONE&
@@ -373,6 +375,42 @@ class Nwis:
             elif '#' not in str(line):
                 return None
 
+    def get_par_description(self, sitefile_text, parameter_code, data_type = 'iv'):
+        """helper method to extract parameter description and methods from 
+        sitefile text.
+
+        Args:
+            sitefile_text (list): list of lines from url, generated during the
+                urlopen(url).readlines() call in get_ivs() 
+            parameter_code (string): NWIS parameter code, e.g. 00060 for 
+                discharge. See:
+                http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
+            data_type (string): iv or dv, type of sitefile text retrieved
+
+        Returns:
+            string: parameter description and units from sitefile text
+        """        
+        if data_type == 'iv':
+            for i, line in enumerate(sitefile_text):
+                if 'Parameter Description' in str(line):
+                    description_line = str(sitefile_text[i+1])
+                    description = description_line.rpartition(parameter_code)[-1].lstrip().rstrip("\\n'")
+                    break
+        elif data_type == 'dv':
+            for i, line in enumerate(sitefile_text):
+                if 'Description' in str(line):
+                    description_line = str(sitefile_text[i+1])
+                    description = ' '.join(description_line.split()[5:]).rstrip("\\n'")
+                    break
+        else:
+            raise ValueError("data_type must be 'iv' or 'dv'")
+                
+        try:
+            description
+        except:
+            description = parameter_code
+        return description
+
     def get_siteinfo(self, data_type, attributes=None):
         """Retrieves site information for the bounding box supplied to the NWIS class instance
 
@@ -503,31 +541,41 @@ class Nwis:
         return df          
 
     
-    def get_ivs(self, station_ID, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31',
-        sample_period = 'D', agg_method = 'mean'):
-        """Retrieves daily values for a site.
+    def get_ivs(self, station_ID, parameter_code='00060', start_date='2000-01-01', 
+                end_date='2000-12-31', sample_period = 'D', agg_method = 'mean'):
+        """Retrieves instantaneous values of a specified parameter type, for a 
+        specified period of time, at a site. Data can be retrieved raw or 
+        aggregated to a specified frequency using 'sample_period' and 
+        'agg_method'. Data gaps are filled with NaNs. 
 
         Parameters
         ----------
         stationID: (string)
             USGS station ID
 
-        parameter_code: string, default is 00060 for discharge.
+        parameter_code: (string), default is 00060 for discharge.
             See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
-
         start_date: (string) 'YYYY-MM-DD'
-            To obtain the entire period-of-record use a start date of 2000-01-01 (default)...
+            To obtain the entire period-of-record use a start date of 2000-01-01 
+            (default)...
         end_date: (string) 'YYYY-MM-DD'
-            preset to take the year 2000, don't set the range too long (longer than a year or so) or the code will be very slow and may not finish running
+            preset to take the year 2000, don't set the range too long (longer 
+            than a year or so) or the code will be very slow and may not finish 
+            running
         sample_period: (string), default 'D' for daily
-            change this string to how you would like the instantaneous values aggregated. this can be daily, weekly, monthly, etc.
-            None will give just the raw data which is generally in 15 minute increments
+            change this string to how you would like the instantaneous values 
+            aggregated. this can be daily, weekly, monthly, etc. See
+            Pandas offset aliases: 
+            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+            A sample period of None will give just the raw data which is 
+            generally in 15 minute increments. 
         agg_method: (string), default 'mean'
-            change this to chose how the aggregated instantaneous values are calculated. options include 'mean', 'median', 'max', etc.
+            change this to chose how the aggregated instantaneous values are 
+            calculated. options include 'mean', 'median', 'max', etc.
 
         Returns
         -------
-        df: a datetime-index dataframe of daily discharge, with datagaps filled with NaNs, aggregated daily or however specified with 'sample_period'
+        df: a datetime-index dataframe of parameter data'
         """
         if parameter_code in list(self.parameter_codes.keys()):
             parameter_code = self.parameter_codes[parameter_code]
@@ -535,10 +583,13 @@ class Nwis:
         url = self.make_iv_url(station_ID, parameter_code=parameter_code,
                                start_date=start_date, end_date=end_date)
         sitefile_text = urlopen(url).readlines()
+        par_description = self.get_par_description(sitefile_text=list(sitefile_text), 
+                                                    parameter_code=parameter_code)
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols, dtype={'site_no': object})
+        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols, 
+                         dtype={'site_no': object})
 
         if len(df) > 2:
 
@@ -552,9 +603,10 @@ class Nwis:
         
             if sample_period is not None:
                 df = df.resample(sample_period).agg(agg_method)
-                df = df.rename(columns = {df.columns[0]: 'discharge (cfs)'})
+                df = df.rename(columns = {df.columns[0]: f'{par_description}'})
             else:
-                df = df.rename(columns = {df.columns[4]: 'discharge (cfs)', df.columns[5]: 'code'})
+                df = df.rename(columns = {df.columns[4]: f'{par_description}',
+                               df.columns[5]: 'code'})
 
         else:
             print('No data at this site during this timeframe.')
@@ -643,14 +695,51 @@ class Nwis:
         self.log = pd.DataFrame(columns=self.log_cols)  # reset the log
         return all_dvs
 
-    def get_all_ivs(self, stations, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31'):
-        ''' This function gets all instantaneous values for a list of station IDs, and places them in a dictionary of dataframes
+    def get_all_ivs(self, stations, parameter_code='00060', start_date='2000-01-01',
+                    end_date='2000-12-31', sample_period = 'D', agg_method = 'mean'):
+        '''Retrieves instantaneous values of a specified parameter type from a list
+        of sites, for a specified period of time. Data can be retrieved raw or 
+        aggregated to a specified frequency using 'sample_period' and 
+        'agg_method'. Data gaps are filled with NaNs. Data is returned as a 
+        dictionary of dataframes.
+
+        Parameters
+        ----------
+        stations: (list)
+            list of USGS station IDs as strings.
+        parameter_code: (string), default is 00060 for discharge.
+            See http://help.waterdata.usgs.gov/codes-and-parameters/parameters.
+        start_date: (string) 'YYYY-MM-DD'
+            To obtain the entire period-of-record use a start date of 2000-01-01 
+            (default)...
+        end_date: (string) 'YYYY-MM-DD'
+            preset to take the year 2000, don't set the range too long (longer 
+            than a year or so) or the code will be very slow and may not finish 
+            running.
+        sample_period: (string), default 'D' for daily
+            change this string to how you would like the instantaneous values 
+            aggregated. this can be daily, weekly, monthly, etc. See
+            Pandas offset aliases: 
+            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+            A sample period of None will give just the raw data which is 
+            generally in 15 minute increments. 
+        agg_method: (string), default 'mean'
+            change this to chose how the aggregated instantaneous values are 
+            calculated. options include 'mean', 'median', 'max', etc.
+
+        Returns
+        -------
+        dictionary of dataframes. Dataframes have a datetime-index and a column
+        with parameter values. 
         '''
         
         all_ivs = {}
         for station in stations:
             try:
-                df = self.get_ivs(station, parameter_code=parameter_code, start_date=start_date, end_date=end_date)
+                df = self.get_ivs(station, parameter_code=parameter_code, 
+                                  start_date=start_date, end_date=end_date,
+                                  sample_period=sample_period, 
+                                  agg_method=agg_method)
             except Exception as e:
                 print(e)
                 continue
