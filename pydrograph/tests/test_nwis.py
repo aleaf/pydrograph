@@ -48,6 +48,44 @@ def test_instantaneous_value(nwis_instance):
     assert 'site_no' in df.columns
     assert df.site_no.dtype == np.object
 
+def test_get_ivs_gw(nwis_instance):
+    # check groundwater site (depth to water) 
+    gw_site = '353831090502401'
+    df = nwis_instance.get_ivs(gw_site, 
+                               parameter_code='72019', 
+                               start_date='2020-08-01',
+                               end_date='2020-08-15')
+
+    assert df.columns[0] == 'Depth to water level, feet below land surface' # check column header/units
+    assert df.shape[0] == 15 # check daily resampling 
+
+    # check without resampling
+    df = nwis_instance.get_ivs(gw_site, 
+                               parameter_code='72019', 
+                               start_date='2020-08-01', 
+                               end_date='2020-08-15', 
+                               sample_period=None)
+    assert df.shape[0] == 15 * 24 * 4 # 15 days at 15 min frequency                           
+    
+def test_get_ivs_sw(nwis_instance):
+    # check surface water site (discharge)
+    sw_site = '07047810'
+    df = nwis_instance.get_ivs(sw_site, 
+                               parameter_code='00060', 
+                               start_date='2002-08-01',
+                               end_date='2002-08-15')
+
+    assert df.columns[0] == 'Discharge, cubic feet per second' # check column header/units
+    assert df.shape[0] == 15 # check daily resampling 
+
+    # check without resampling
+    df = nwis_instance.get_ivs(sw_site, 
+                               parameter_code='00060', 
+                               start_date='2002-08-01', 
+                               end_date='2002-08-15', 
+                               sample_period=None)
+    assert df.shape[0] == 15 * 24 # 15 days at 1 hr frequency 
+
 def test_tuple_extent_no_data():
 
     bbox = (-91.45793026894977, 47.2, 
@@ -63,3 +101,50 @@ def test_get_all_ivs(nwis_instance, stations):
     assert len(all_sites) > 0
     assert len(site_one) > 2
     #assert all_sites.site_no.dtype == np.object
+
+def test_get_all_ivs_sw(nwis_instance):
+    sites = ['07040450', '07047800']
+
+    # check set of surface water sites from nwis instnace
+    df_dct = nwis_instance.get_all_ivs(stations=sites, 
+                                       start_date='2000-12-01', 
+                                       end_date='2000-12-31')
+
+    for site, df in df_dct.items():
+        assert site in sites
+        assert df.shape[0] == 31 # aggregated daily
+        assert df.columns == 'Discharge, cubic feet per second'
+    
+    # check without resampling
+    df_dct = nwis_instance.get_all_ivs(stations=sites, 
+                                       start_date='2000-12-01', 
+                                       end_date='2000-12-31',
+                                       sample_period=None)
+    for site, df in df_dct.items():
+        assert site in sites
+        assert 'datetime' in df.columns and 'Discharge, cubic feet per second' in df.columns
+        df.datetime[0] == '2000-12-01 00:00' # verify has hh:mm
+
+
+def test_get_all_ivs_gw(nwis_instance):
+    sites = ['353606090510701', '353831090502401']
+
+    # check set of groundwater sites from nwis instnace
+    df_dct = nwis_instance.get_all_ivs(stations=sites, 
+                                       parameter_code='72019', 
+                                       start_date='2020-12-01', 
+                                       end_date='2020-12-31')
+    for site, df in df_dct.items():
+        assert site in sites
+        assert df.shape[0] == 31 # aggregated daily
+        assert df.columns == 'Depth to water level, feet below land surface'
+
+    df_dct = nwis_instance.get_all_ivs(stations=sites, 
+                                       parameter_code='72019', 
+                                       start_date='2020-12-01', 
+                                       end_date='2020-12-31',
+                                       sample_period=None)
+    for site, df in df_dct.items():
+        assert site in sites
+        assert 'datetime' in df.columns and 'Depth to water level, feet below land surface' in df.columns
+        df.datetime[0] == '2020-12-01 00:00' # verify has hh:mm
