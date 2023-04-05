@@ -1,7 +1,6 @@
 name: pydrograph_ci
 channels:
 - conda-forge
-- defaults
 dependencies:
 - python
 - ipython
@@ -14,7 +13,7 @@ dependencies:
 - xmltodict
 - fiona
 - shapely
-- pyproj>=2.2
+- pyproj
 - codecov
 - coverage
 - flake8
