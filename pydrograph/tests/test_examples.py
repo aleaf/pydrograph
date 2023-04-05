@@ -131,6 +131,15 @@ def test_get_field_measurements(nwis_instance, field_sites):
     fm = nwis.get_all_measurements(sites)
     assert isinstance(fm, pd.DataFrame)
     assert fm.site_no.dtype == np.object
+    
+
+def test_get_expanded_field_measurements(nwis_instance, field_sites):
+    nwis = nwis_instance
+    sites = field_sites.site_no.tolist()[:5]
+    fm = nwis.get_all_measurements(sites, data_format='rdb_expanded')
+    assert isinstance(fm, pd.DataFrame)
+    assert fm.site_no.dtype == np.object
+    assert 'chan_width' in fm.columns
 
 
 def test_get_gw_field_measurements(nwis_instance, gw_field_sites):

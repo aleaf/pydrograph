@@ -335,24 +335,31 @@ class Nwis:
         print('{}'.format(url))
         return url
 
-    def make_measurements_url(self, station_ID, txt='measurements'):
+    def make_measurements_url(self, site_number, txt='measurements', data_format='rdb'):
         """Creates url to retrieve daily values for a site
-
 
         Parameters
         ----------
-        stationID: (string)
-            USGS station ID
-
-        txt: (string)
-            'measurements' for field measurements of streamflow
-            'gwlevels' for field measurements of groundwater level
+        site_number : str
+            USGS site number
+        txt : str 
+            String in url specifying type of measurement
+            measurements : field measurements
+            dv : daily values
+            gwlevels : groundwater levels
+            qwdata : water quality data
+        data_format : str, {'rdb', 'rdb_expanded'}
+            NWIS format for returned data. 
+            'rdb': Tab-separated data without channel data
+            'rdb_expanded': Tab-separated data with channel data
+            Default is 'rdb'.
 
         """
-        station_ID = Nwis.correct_stationID(station_ID)
+        site_number = Nwis.correct_stationID(site_number)
 
-        url =  'http://nwis.waterdata.usgs.gov/nwis/{}?site_no={}&agency_cd=USGS&format=rdb'\
-                .format(txt, station_ID)
+        url =  (f'http://nwis.waterdata.usgs.gov/nwis/{txt}?'
+                f'site_no={site_number}&'
+                f'agency_cd=USGS&format={data_format}')
         print('{}'.format(url))
         return url
 
@@ -502,7 +509,6 @@ class Nwis:
         print("finished inventory in {:.2f}s\n".format(time.time() - t0))
         return df          
 
-    
     def get_ivs(self, station_ID, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31',
         sample_period = 'D', agg_method = 'mean'):
         """Retrieves daily values for a site.
@@ -564,24 +570,35 @@ class Nwis:
         else:
             return None
 
-    def get_measurements(self, station_ID, txt='measurement'):
+    def get_measurements(self, site_number, txt='measurement', data_format='rdb'):
         """Retrieves field measurements for a site.
 
         Parameters
         ----------
-        stationID: (string)
-            USGS station ID
+        site_number : str
+            USGS site number
+        txt : str 
+            String in url specifying type of measurement
+            measurements : field measurements
+            dv : daily values
+            gwlevels : groundwater levels
+            qwdata : water quality data
+        data_format : str, {'rdb', 'rdb_expanded'}
+            NWIS format for returned data. 
+            'rdb': Tab-separated data without channel data
+            'rdb_expanded': Tab-separated data with channel data
+            Default is 'rdb'.
 
         Returns
         -------
         dv: a datetime-index dataframe of the measurements
         """
 
-        url = self.make_measurements_url(station_ID, txt)
+        url = self.make_measurements_url(site_number, txt, data_format=data_format)
         sitefile_text = urlopen(url).readlines()
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
-        loginfo = [str(station_ID), url, self.get_datetime_retrieved(sitefile_text)]
+        loginfo = [str(site_number), url, self.get_datetime_retrieved(sitefile_text)]
         df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
                          dtype={'site_no': object})
         if len(df) > 0:
@@ -593,25 +610,30 @@ class Nwis:
                               pd.DataFrame([loginfo], columns=self.log_cols)])
         return df
 
-    def get_all_measurements(self, site_numbers, txt='measurements'):
+    def get_all_measurements(self, site_numbers, txt='measurements', data_format='rdb'):
         """Get measurements for a list of site numbers.
 
         Parameters
         ----------
         site_numbers : list or 1D array
             USGS site numbers
-        txt : str
+        txt : str 
             String in url specifying type of measurement
             measurements : field measurements
             dv : daily values
             gwlevels : groundwater levels
             qwdata : water quality data
+        data_format : str, {'rdb', 'rdb_expanded'}
+            NWIS format for returned data. 
+            'rdb': Tab-separated data without channel data
+            'rdb_expanded': Tab-separated data with channel data
+            Default is 'rdb'.
 
         """
         all_measurements = pd.DataFrame()
         for s in site_numbers:
             print(s)
-            df = self.get_measurements(s, txt=txt)
+            df = self.get_measurements(s, txt=txt, data_format=data_format)
             if len(df) == 0:
                 print('no data returned.')
                 continue
