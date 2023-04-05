@@ -67,10 +67,10 @@ def test_get_sw_sites(nwis_instance):
     dv_sites = nwis.get_siteinfo('daily_values')
     assert isinstance(field_sites, pd.DataFrame)
     assert len(field_sites) > 0
-    assert field_sites.site_no.dtype == np.object
+    assert field_sites.site_no.dtype == object
     assert isinstance(dv_sites, pd.DataFrame)
     assert len(dv_sites) > 0
-    assert dv_sites.site_no.dtype == np.object
+    assert dv_sites.site_no.dtype == object
 
 
 def test_get_gw_sites(nwis_instance):
@@ -79,10 +79,10 @@ def test_get_gw_sites(nwis_instance):
     gwdv_sites = nwis.get_siteinfo('gw_daily_values')
     assert isinstance(gwfield_sites, pd.DataFrame)
     assert len(gwfield_sites) > 0
-    assert gwfield_sites.site_no.dtype == np.object
+    assert gwfield_sites.site_no.dtype == object
     assert isinstance(gwdv_sites, pd.DataFrame)
     assert len(gwdv_sites) > 0
-    assert gwdv_sites.site_no.dtype == np.object
+    assert gwdv_sites.site_no.dtype == object
 
 
 def test_get_daily_values_sw(nwis_instance, dv_sites):
@@ -130,7 +130,7 @@ def test_get_field_measurements(nwis_instance, field_sites):
     sites = field_sites.site_no.tolist()[:5]
     fm = nwis.get_all_measurements(sites)
     assert isinstance(fm, pd.DataFrame)
-    assert fm.site_no.dtype == np.object
+    assert fm.site_no.dtype == object
     
 
 def test_get_expanded_field_measurements(nwis_instance, field_sites):
@@ -138,7 +138,7 @@ def test_get_expanded_field_measurements(nwis_instance, field_sites):
     sites = field_sites.site_no.tolist()[:5]
     fm = nwis.get_all_measurements(sites, data_format='rdb_expanded')
     assert isinstance(fm, pd.DataFrame)
-    assert fm.site_no.dtype == np.object
+    assert fm.site_no.dtype == object
     assert 'chan_width' in fm.columns
 
 
@@ -147,7 +147,7 @@ def test_get_gw_field_measurements(nwis_instance, gw_field_sites):
     sites = gw_field_sites.site_no.tolist()[:5]
     fm = nwis.get_all_measurements(sites, txt='gwlevels')
     assert isinstance(fm, pd.DataFrame)
-    assert fm.site_no.dtype == np.object
+    assert fm.site_no.dtype == object
 
 
 

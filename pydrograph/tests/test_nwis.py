@@ -46,7 +46,7 @@ def test_instantaneous_value(nwis_instance):
     df = nwis_instance.get_iv_siteinfo(attributes = 'iv_attributes')
     assert len(df) > 0
     assert 'site_no' in df.columns
-    assert df.site_no.dtype == np.object
+    assert df.site_no.dtype == object
 
 def test_tuple_extent_no_data():
 
@@ -62,4 +62,4 @@ def test_get_all_ivs(nwis_instance, stations):
     site_one = list(all_sites.values())[0]
     assert len(all_sites) > 0
     assert len(site_one) > 2
-    #assert all_sites.site_no.dtype == np.object
+    #assert all_sites.site_no.dtype == object
