@@ -1,3 +1,4 @@
+import datetime as dt
 import numpy as np
 import pandas as pd
 import gisutils
@@ -62,12 +63,12 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
         comids = {comid}
         upstream = [comid]
         for j in range(1000):
-            upstream = set(pf.ix[pf.TOCOMID.isin(upstream), 'FROMCOMID']).difference({0})
+            upstream = set(pf.loc[pf.TOCOMID.isin(upstream), 'FROMCOMID']).difference({0})
             if len(upstream) == 0:
                 break
             comids.update(upstream)
 
-        total_upstream_area = cmt.ix[comids, 'AreaSqKM'].sum()
+        total_upstream_area = cmt.loc[comids, 'AreaSqKM'].sum()
         if comid == 11951607:
             j=2
         # estimate fraction of containing catchment that is upstream
@@ -79,10 +80,10 @@ def get_upstream_area(points, PlusFlow, NHDFlowlines, NHDCatchments, nearfield=N
         #i = np.argmin(np.sqrt((X-g.x)**2 + (Y-g.y)**2)) # closest point on flowline
 
         # should be able to just project point onto flowline and divide by total length
-        l = fl.ix[comid, 'geometry']
+        l = fl.loc[comid, 'geometry']
         frac = l.project(g)/l.length
         #frac = LineString(zip(X[:i+1], Y[:i+1])).length/LineString(zip(X[i:], Y[i:])).length
-        upstream_in_catchment = cmt.ix[comid, 'AreaSqKM'] * frac
+        upstream_in_catchment = cmt.loc[comid, 'AreaSqKM'] * frac
         total_upstream_area += upstream_in_catchment
         upstream_area.append(total_upstream_area)
 
@@ -259,18 +260,18 @@ def WI_statewide_eqn(Qm, A, Qr, Q90):
     return Qb.copy(), Bf.copy()
 
 
-def baseflow_summary(self, field_sites, field_measurements, daily_values, q90_window=20, output_proj4=None):
+def baseflow_summary(nwis_obj, field_sites, field_measurements, daily_values, q90_window=20, crs=None):
 
-    fm = field_measurements
-    dvs = daily_values
+    fm = field_measurements.copy()
+    dvs = daily_values.copy()
 
     if fm['measurement_dt'].dtype != 'datetime64[ns]':
         fm['measurement_dt'] = pd.to_datetime(fm.measurement_dt)
-
-    # reprojected the output X, Y coordinates
-    print('reprojecting output from\n{}\nto\n{}...'.format(self.proj4, output_proj4))
-    if output_proj4 is not None:
-        field_sites['geometry'] = gisutils.project(field_sites, self.proj4, output_proj4)
+    
+    if crs is not None:
+        dest_crs = gisutils.get_authority_crs(crs)
+        print('reprojecting output from\n{}\nto\n{}...'.format(nwis_obj.crs, dest_crs))
+        field_sites['geometry'] = gisutils.project(field_sites['geometry'], nwis_obj.crs, dest_crs)
 
     fm_site_no = []
     Qm = []
@@ -289,10 +290,10 @@ def baseflow_summary(self, field_sites, field_measurements, daily_values, q90_wi
 
             # check if index station covers measurement date
             try:
-                dv = data.ix[Dt]
+                dv = data.loc[Dt]
             except KeyError:
                 continue
-            dv = data.ix[Dt]
+            dv = data.loc[Dt]
             site_no = dv.site_no
             DDcd = [k for k in list(data.keys()) if '00060' in k and not 'cd' in k][0]
             try:
@@ -301,13 +302,13 @@ def baseflow_summary(self, field_sites, field_measurements, daily_values, q90_wi
                 continue
 
             # get q90 values for window
-            q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window, unit='Y')
-            q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window, unit='Y')
-            values = pd.to_numeric(data.ix[q90start:q90end, DDcd], errors='coerce')
+            q90start = pd.Timestamp(Dt) - pd.Timedelta(0.5 * q90_window * 365.25, unit='days')
+            q90end = pd.Timestamp(Dt) + pd.Timedelta(0.5 * q90_window * 365.25, unit='days')
+            values = pd.to_numeric(data.loc[q90start:q90end, DDcd], errors='coerce')
             q90 = values.quantile(q=0.1)
 
             # append last to avoid mismatches in length
-            site_info = field_sites.ix[fm.site_no.values[i]]
+            site_info = field_sites.loc[fm.site_no.values[i]]
             fm_site_no.append(fm.site_no.values[i])
             station_nm.append(site_info['station_nm'])
             Qm.append(fm.discharge_va.values[i])
@@ -331,7 +332,7 @@ def baseflow_summary(self, field_sites, field_measurements, daily_values, q90_wi
                        'indexQ90': indexQ90,
                        'X': X,
                        'Y': Y})
-    df['est_error'] = [self.est_error.get(q.lower(), self.default_error) for q in df.quality]
+    df['est_error'] = [nwis_obj.est_error.get(q.lower(), nwis_obj.default_error) for q in df.quality]
     df = df[['site_no', 'datetime', 'Qm', 'quality', 'est_error',
              'idx_station', 'indexQr', 'indexQ90', 'drn_area', 'station_nm', 'X', 'Y']]
     return df
