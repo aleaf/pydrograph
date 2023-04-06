@@ -599,8 +599,23 @@ class Nwis:
         skiprows = self.get_header_length(sitefile_text, 'agency_cd')
         cols = sitefile_text[skiprows - 2].decode('utf-8').strip().split('\t')
         loginfo = [str(site_number), url, self.get_datetime_retrieved(sitefile_text)]
-        df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
-                         dtype={'site_no': object})
+        try:
+            df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
+                            dtype={'site_no': object})
+        except:
+            # try fixing any bad line erros
+            def line_fixer(x):
+                expected_length = len(cols)
+                # truncate long lines
+                if len(x) > expected_length:
+                    return x[:expected_length]
+                # pad short lines with None
+                elif len(x) < expected_length:
+                    return x + [None] * (expected_length - len(x))
+                return None
+            df = pd.read_csv(url, sep='\t', skiprows=skiprows, header=None, names=cols,
+                            dtype={'site_no': object},
+                            engine='python', on_bad_lines=line_fixer)
         if len(df) > 0:
             df.index = pd.to_datetime(df[self._get_date_col(df)])
             loginfo.append(True)

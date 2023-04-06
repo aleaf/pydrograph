@@ -62,4 +62,10 @@ def test_get_all_ivs(nwis_instance, stations):
     site_one = list(all_sites.values())[0]
     assert len(all_sites) > 0
     assert len(site_one) > 2
-    #assert all_sites.site_no.dtype == object
+
+def test_get_measurements(nwis_instance):
+        
+    # as of 4/6/2023, 
+    # the rdb data for this side had an extra \t on one line
+    nwis_instance.get_measurements(
+        '07029500', data_format='rdb_expanded')
