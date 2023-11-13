@@ -204,8 +204,9 @@ def IHmethod(Qseries, block_length=5, tp=0.9, interp_semilog=True, freq='D', lim
     # interpolate between baseflow ordinates
     if interp_semilog:
         iszero = Q.ordinate.values == 0
-        logQ = np.log10(Q.ordinate)
-        logQ[iszero] = -2
+        logQ = Q.ordinate.copy()
+        logQ[iszero] = 0.01
+        logQ = np.log10(logQ)
         QB = np.power(10.0, logQ.interpolate(limit=limit).values)
     else:
         QB = Q.ordinate.interpolate(limit=limit).values
