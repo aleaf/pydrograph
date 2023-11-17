@@ -509,8 +509,8 @@ class Nwis:
         print("finished inventory in {:.2f}s\n".format(time.time() - t0))
         return df          
 
-    def get_ivs(self, station_ID, parameter_code='00060', start_date='2000-01-01', end_date='2000-12-31',
-        sample_period = 'D', agg_method = 'mean'):
+    def get_ivs(self, station_ID, parameter_code='00060', start_date='1900-01-01', end_date=None,
+        sample_period='D', agg_method='mean'):
         """Retrieves daily values for a site.
 
         Parameters
@@ -558,9 +558,10 @@ class Nwis:
         
             if sample_period is not None:
                 df = df.resample(sample_period).agg(agg_method)
-                df = df.rename(columns = {df.columns[0]: 'discharge (cfs)'})
-            else:
-                df = df.rename(columns = {df.columns[4]: 'discharge (cfs)', df.columns[5]: 'code'})
+                df = df.rename(columns = {df.columns[0]: f'{parameter_code}_{sample_period}_{agg_method}'})
+            #else:
+                #df = df.rename(columns = {df.columns[4]: f'{parameter_code}', 
+                #                          df.columns[5]: 'code'})
 
         else:
             print('No data at this site during this timeframe.')
